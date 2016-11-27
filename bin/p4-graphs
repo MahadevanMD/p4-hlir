@@ -43,6 +43,25 @@ def get_parser():
                         action='store_true', default = False,
                         help='When counting stages and displaying allocation, \
                         do not include conditonal tables')
+    parser.add_argument('--deps-no-control-flow-edges',
+                        action='store_true', default = False,
+                        help="""When drawing table dependency graphs,
+                        do not include edges that are only there for
+                        control flow purposes, e.g. because one table access
+                        occurred in the source code sequentially before another,
+                        but there is no field in the later table's search key
+                        that depends upon an action of the earlier table.""")
+    parser.add_argument('--deps-no-condition-labels',
+                        action='store_true', default = False,
+                        help="""When drawing table dependency graphs,
+                        do not include the source code of the conditions
+                        as part of the label on condition nodes.""")
+    parser.add_argument('--deps-no-fields-on-edges',
+                        action='store_true', default = False,
+                        help="""When drawing table dependency graphs,
+                        do not include the fields on dependency edges
+                        indicating which ones the later table lookup
+                        uses that may be modified by the earlier one.""")
     parser.add_argument('--primitives', action='append', default = [],
                         help="A JSON file which contains primitive declarations \
                         (to be used in addition to the standard ones)")
@@ -103,8 +122,12 @@ def main():
     if "table" in graphs_to_generate:
         dot.export_table_graph(h, basename, gen_dir, predecessors=args.table_predecessors)
     if "deps" in graphs_to_generate:
-        dot.export_table_dependency_graph(h, basename, gen_dir,
-                                          show_conds = args.dep_stages_with_conds)
+        dot.export_table_dependency_graph(
+            h, basename, gen_dir,
+            show_conds = args.dep_stages_with_conds,
+            show_control_flow = not args.deps_no_control_flow_edges,
+            show_condition_str = not args.deps_no_condition_labels,
+            show_fields = not args.deps_no_fields_on_edges)
     
     pass
 

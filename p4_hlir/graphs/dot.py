@@ -173,7 +173,10 @@ def export_table_graph(hlir, filebase, gen_dir, predecessors=False):
         print 'Generating eps'
         generate_graph_eps(filename_dot, filename_eps)
 
-def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False):
+def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
+                                  show_control_flow = True,
+                                  show_condition_str = True,
+                                  show_fields = True):
     print 
     print "TABLE DEPENDENCIES..."
 
@@ -185,7 +188,10 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False):
     min_stages = graph.count_min_stages(show_conds = show_conds)
     print "pipeline ingress requires at least", min_stages, "stages"
     with open(filename_dot, 'w') as dotf:
-        graph.generate_dot(out = dotf)
+        graph.generate_dot(out = dotf,
+                           show_control_flow = show_control_flow,
+                           show_condition_str = show_condition_str,
+                           show_fields = show_fields)
     
     filename_png = os.path.join(gen_dir, filebase + ".ingress.tables_dep.png")
     filename_eps = os.path.join(gen_dir, filebase + ".ingress.tables_dep.eps")
@@ -203,7 +209,10 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False):
         min_stages = graph.count_min_stages(show_conds = show_conds)
         print "pipeline egress requires at least", min_stages, "stages"
         with open(filename_dot, 'w') as dotf:
-            graph.generate_dot(out = dotf)
+            graph.generate_dot(out = dotf,
+                               show_control_flow = show_control_flow,
+                               show_condition_str = show_condition_str,
+                               show_fields = show_fields)
 
         filename_png = os.path.join(gen_dir, filebase + ".egress.tables_dep.png")
         filename_eps = os.path.join(gen_dir, filebase + ".egress.tables_dep.eps")

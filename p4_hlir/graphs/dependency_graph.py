@@ -163,7 +163,7 @@ class Graph:
                      show_condition_str = True,
                      show_fields = True):
         styles = {Dependency.CONTROL_FLOW: "style=dotted",
-                  Dependency.REVERSE_READ: "color=yellow",
+                  Dependency.REVERSE_READ: "color=orange",
                   Dependency.SUCCESSOR: "color=green",
                   Dependency.ACTION: "color=blue",
                   Dependency.MATCH: "color=red"}
@@ -172,12 +172,10 @@ class Graph:
         # set conditional tables to be represented as boxes
         for node in self.nodes.values():
             if node.type_ != Node.CONDITION: continue
+            label = node.name
             if show_condition_str:
-                label = "\"" + node.name + "\\n" +\
-                        str(node.p4_node.condition) + "\""
-                label = "label=" + label
-            else:
-                label = node.name
+                label += "\\n" + str(node.p4_node.condition)
+            label = "label=\"" + label + "\""
             out.write(node.name + " [shape=box " + label + "];\n")
 
         for node in self.nodes.values():
