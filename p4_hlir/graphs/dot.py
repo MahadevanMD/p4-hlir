@@ -176,7 +176,8 @@ def export_table_graph(hlir, filebase, gen_dir, predecessors=False):
 def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                                   show_control_flow = True,
                                   show_condition_str = True,
-                                  show_fields = True):
+                                  show_fields = True,
+                                  debug_count_min_stages = False):
     print 
     print "TABLE DEPENDENCIES..."
 
@@ -185,7 +186,8 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
 
     filename_dot = os.path.join(gen_dir, filebase + ".ingress.tables_dep.dot")
     graph = dependency_graph.build_table_graph_ingress(hlir)
-    min_stages = graph.count_min_stages(show_conds = show_conds)
+    min_stages = graph.count_min_stages(
+        show_conds = show_conds, debug = debug_count_min_stages)
     print "pipeline ingress requires at least", min_stages, "stages"
     with open(filename_dot, 'w') as dotf:
         graph.generate_dot(out = dotf,
@@ -206,7 +208,8 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
     if hlir.p4_egress_ptr:
         filename_dot = os.path.join(gen_dir, filebase + ".egress.tables_dep.dot")
         graph = dependency_graph.build_table_graph_egress(hlir)
-        min_stages = graph.count_min_stages(show_conds = show_conds)
+        min_stages = graph.count_min_stages(
+            show_conds = show_conds, debug = debug_count_min_stages)
         print "pipeline egress requires at least", min_stages, "stages"
         with open(filename_dot, 'w') as dotf:
             graph.generate_dot(out = dotf,

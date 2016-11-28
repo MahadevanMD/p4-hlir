@@ -114,12 +114,17 @@ class Graph:
 
         return has_cycle, sorted_list
 
-    def count_min_stages(self, show_conds = False):
+    def count_min_stages(self, show_conds = False, debug = False):
         has_cycle, sorted_list = self.topo_sorting()
         assert(not has_cycle)
         nb_stages = 0
         stage_list = []
         stage_dependencies_list = []
+        if debug:
+            print('------------------------------')
+            print('Debug count_min_stages')
+            print("dependency type stage table or condition")
+            print("--------------- ----- ------------------")
         for table in sorted_list:
             d_type_ = 0
             i = nb_stages - 1
@@ -132,10 +137,18 @@ class Graph:
                     break
                 else:
                     i -= 1
+            orig_i = i
             if d_type_ == 0:
                 i += 1
             elif d_type_ >= Dependency.ACTION:
                 i += 1
+            if debug:
+                if d_type_ in Dependency._types:
+                    dname = Dependency._types[d_type_]
+                else:
+                    dname = 'unknown'
+                print("%d %-12s  %2d+%d  %s"
+                      "" % (d_type_, dname, orig_i, i - orig_i, table.name))
             if i == nb_stages:
                 stage_list.append(set())
                 stage_dependencies_list.append(defaultdict(int))
@@ -148,7 +161,9 @@ class Graph:
                 type_ = edge.type_
                 if type_ > 0 and type_ > stage_dependencies[node_to]:
                     stage_dependencies[node_to] = type_                
-                
+        if debug:
+            print('------------------------------')
+        
         for stage in stage_list:
             if not show_conds:
                 stage = [table for table in stage if table.type_ is not Node.CONDITION]

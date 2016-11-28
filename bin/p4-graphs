@@ -62,6 +62,12 @@ def get_parser():
                         do not include the fields on dependency edges
                         indicating which ones the later table lookup
                         uses that may be modified by the earlier one.""")
+    parser.add_argument('--deps-debug-count-min-stages',
+                        action='store_true', default = False,
+                        help="""When drawing table dependency graphs,
+                        produce extra debugging output while counting
+                        the minimum number of stages required to
+                        execute the program.""")
     parser.add_argument('--primitives', action='append', default = [],
                         help="A JSON file which contains primitive declarations \
                         (to be used in addition to the standard ones)")
@@ -127,7 +133,8 @@ def main():
             show_conds = args.dep_stages_with_conds,
             show_control_flow = not args.deps_no_control_flow_edges,
             show_condition_str = not args.deps_no_condition_labels,
-            show_fields = not args.deps_no_fields_on_edges)
+            show_fields = not args.deps_no_fields_on_edges,
+            debug_count_min_stages = args.deps_debug_count_min_stages)
     
     pass
 
