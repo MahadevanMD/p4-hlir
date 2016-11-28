@@ -152,7 +152,9 @@ class Graph:
         for stage in stage_list:
             if not show_conds:
                 stage = [table for table in stage if table.type_ is not Node.CONDITION]
-            print map(lambda t: t.name, stage)
+            # Sorting here is simply to try to get a more consistent
+            # output from one run of the program to the next.
+            print sorted(map(lambda t: t.name, stage))
             
         # print map(lambda t: t.name, sorted_list)
         return nb_stages
@@ -169,8 +171,18 @@ class Graph:
                   Dependency.MATCH: "color=red"}
         out.write("digraph " + self.name + " {\n")
 
+        # The uses of the 'sorted' function below are not necessary
+        # for correct behavior, but are done to try to make the
+        # contents of the dot output file in a more consistent order
+        # from one run of this program to the next.  By default,
+        # Python dicts and sets can have their iteration order change
+        # from one run of a program to the next because the hash
+        # function changes from one run to the next.
+        nodes_by_name = list(sorted(self.nodes.values(),
+                                    key=lambda node: node.name))
+
         # set conditional tables to be represented as boxes
-        for node in self.nodes.values():
+        for node in nodes_by_name:
             if node.type_ != Node.CONDITION: continue
             label = node.name
             if show_condition_str:
@@ -178,8 +190,11 @@ class Graph:
             label = "label=\"" + label + "\""
             out.write(node.name + " [shape=box " + label + "];\n")
 
-        for node in self.nodes.values():
-            for node_to, edge in node.edges.items():
+        for node in nodes_by_name:
+            node_tos_by_name = sorted(list(node.edges.keys()),
+                                      key=lambda node: node.name)
+            for node_to in node_tos_by_name:
+                edge = node.edges[node_to]
                 if not show_control_flow and edge.type_ == Dependency.CONTROL_FLOW:
                     continue
                 
@@ -187,6 +202,7 @@ class Graph:
                     dep_fields = []
                     for field in edge.dep.fields:
                         dep_fields.append(str(field))
+                    dep_fields = sorted(dep_fields)
                     edge_label = "label=\"" + ",\n".join(dep_fields) + "\""
                     edge_label += " decorate=true"
                 else:
