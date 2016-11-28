@@ -120,19 +120,22 @@ class Graph:
         nb_stages = 0
         stage_list = []
         stage_dependencies_list = []
+        stage_dependencies_table_list = []
         if debug:
             print('------------------------------')
             print('Debug count_min_stages')
-            print("dependency type stage table or condition")
-            print("--------------- ----- ------------------")
+            print("from table/condition       dependency type stage to table/condition")
+            print("-------------------------- --------------- ----- ------------------")
         for table in sorted_list:
             d_type_ = 0
+            d_table_from_ = '(none)'
             i = nb_stages - 1
             while i >= 0:
                 stage = stage_list[i]
                 stage_dependencies = stage_dependencies_list[i]
                 if table in stage_dependencies:
                     d_type_ = stage_dependencies[table]
+                    d_table_from_ = stage_dependencies_table_list[i][table].name
                     assert(d_type_ > 0)
                     break
                 else:
@@ -147,11 +150,13 @@ class Graph:
                     dname = Dependency._types[d_type_]
                 else:
                     dname = 'unknown'
-                print("%d %-12s  %2d+%d  %s"
-                      "" % (d_type_, dname, orig_i, i - orig_i, table.name))
+                print("%-26s %d %-12s  %2d+%d  %s"
+                      "" % (d_table_from_, d_type_, dname,
+                            orig_i, i - orig_i, table.name))
             if i == nb_stages:
                 stage_list.append(set())
                 stage_dependencies_list.append(defaultdict(int))
+                stage_dependencies_table_list.append({})
                 nb_stages += 1
                 
             stage = stage_list[i]
@@ -161,6 +166,7 @@ class Graph:
                 type_ = edge.type_
                 if type_ > 0 and type_ > stage_dependencies[node_to]:
                     stage_dependencies[node_to] = type_                
+                    stage_dependencies_table_list[i][node_to] = table
         if debug:
             print('------------------------------')
         
