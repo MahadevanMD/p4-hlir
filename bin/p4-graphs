@@ -68,6 +68,12 @@ def get_parser():
                         produce extra debugging output while counting
                         the minimum number of stages required to
                         execute the program.""")
+    parser.add_argument('--debug-key-result-widths',
+                        action='store_true', default = False,
+                        help="""When drawing table dependency graphs,
+                        produce extra debugging output showing how
+                        the table search key and result widths were
+                        calculated.""")
     parser.add_argument('--primitives', action='append', default = [],
                         help="A JSON file which contains primitive declarations \
                         (to be used in addition to the standard ones)")
@@ -134,7 +140,8 @@ def main():
             show_control_flow = not args.deps_no_control_flow_edges,
             show_condition_str = not args.deps_no_condition_labels,
             show_fields = not args.deps_no_fields_on_edges,
-            debug_count_min_stages = args.deps_debug_count_min_stages)
+            debug_count_min_stages = args.deps_debug_count_min_stages,
+            debug_key_result_widths = args.debug_key_result_widths)
     
     pass
 

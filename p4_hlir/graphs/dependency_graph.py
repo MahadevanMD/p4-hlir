@@ -14,8 +14,10 @@
 
 import p4_hlir.hlir
 import sys
+import pprint
 from collections import defaultdict
 from p4_hlir.hlir.dependencies import *
+import hlir_info as info
 
 class Dependency:
     CONTROL_FLOW = 0
@@ -114,7 +116,9 @@ class Graph:
 
         return has_cycle, sorted_list
 
-    def count_min_stages(self, show_conds = False, debug = False):
+    def count_min_stages(self, show_conds = False,
+                         debug = False,
+                         debug_key_result_widths = False):
         has_cycle, sorted_list = self.topo_sorting()
         assert(not has_cycle)
         nb_stages = 0
@@ -169,15 +173,49 @@ class Graph:
                     stage_dependencies_table_list[i][node_to] = table
         if debug:
             print('------------------------------')
+        if debug_key_result_widths:
+            print('------------------------------')
+            print('Debug table search key and table result widths')
+            print('------------------------------')
+            for stage in stage_list:
+                for table in sorted(stage, key=lambda t: t.name):
+                    if not show_conds and table.type_ is Node.CONDITION:
+                        continue
+                    pprint.pprint(info.match_field_info(table.p4_node))
+                    pprint.pprint(info.result_info(table.p4_node))
+            print('------------------------------')
         
+        lines = []
+        stage_num = 0
+        total_key_width = 0
+        total_result_width = 0
         for stage in stage_list:
-            if not show_conds:
-                stage = [table for table in stage if table.type_ is not Node.CONDITION]
+            stage_num += 1
+            stage_key_width = 0
+            stage_result_width = 0
+            lines2 = []
             # Sorting here is simply to try to get a more consistent
             # output from one run of the program to the next.
-            print sorted(map(lambda t: t.name, stage))
-            
-        # print map(lambda t: t.name, sorted_list)
+            for table in sorted(stage, key=lambda t: t.name):
+                if not show_conds and table.type_ is Node.CONDITION:
+                    continue
+                key_width = info.match_field_info(table.p4_node)['total_field_width']
+                result_width = info.result_info(table.p4_node)['result_width']
+                lines2.append("    %4d %4d %s"
+                              "" % (key_width, result_width, table.name))
+                stage_key_width += key_width
+                stage_result_width += result_width
+            lines.append("stage %d of %d total search key width %d"
+                         " result width %d"
+                         "" % (stage_num, nb_stages, stage_key_width,
+                               stage_result_width))
+            lines += lines2
+            total_key_width += stage_key_width
+            total_result_width += stage_result_width
+        for line in lines:
+            print(line)
+        print("For all stages, total search key width %d result width %d"
+              "" % (total_key_width, total_result_width))
         return nb_stages
 
 
