@@ -186,6 +186,10 @@ class Graph:
             print('------------------------------')
         
         lines = []
+        lines.append("      search")
+        lines.append("      key    result")
+        lines.append("stage width  width  table/condition name")
+        lines.append("----- ------ ------ --------------------")
         stage_num = 0
         total_key_width = 0
         total_result_width = 0
@@ -201,11 +205,11 @@ class Graph:
                     continue
                 key_width = info.match_field_info(table.p4_node)['total_field_width']
                 result_width = info.result_info(table.p4_node)['result_width']
-                lines2.append("    %4d %4d %s"
-                              "" % (key_width, result_width, table.name))
+                lines2.append("%5d %6d %6d %s" % (stage_num, key_width,
+                                                  result_width, table.name))
                 stage_key_width += key_width
                 stage_result_width += result_width
-            lines.append("stage %d of %d total search key width %d"
+            lines.append("--- stage %d of %d total search key width %d"
                          " result width %d"
                          "" % (stage_num, nb_stages, stage_key_width,
                                stage_result_width))
