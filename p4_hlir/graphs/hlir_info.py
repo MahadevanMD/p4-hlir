@@ -91,8 +91,11 @@ def match_field_info(table):
 
 
 def num_action_type_bits(num_actions):
+    """For a table with `num_actions` different actions that can be
+    performed, return the number of bits to do a straightforward
+    encoding of these as separate unique ids."""
     assert(num_actions >= 0)
-    if num_actions <= 1:
+    if num_actions == 0:
         return 0
     return int(math.ceil(math.log(num_actions, 2)))
 
@@ -157,6 +160,22 @@ def result_info(table):
     # Don't worry about trying to absolutely minimize table width
     # using Huffman encoding of the action type, but a real optimized
     # implementation might want to do that.
-    ret['result_width'] = (num_action_type_bits(ret['num_actions']) +
+
+    # Little nit-pick case I'd like to get somewhere close to correct,
+    # but it may still be a little bit off.  Assume that if the search
+    # key is _not empty_, then the result needs to include an
+    # indication that a miss occurred, so that the processor can do
+    # the miss action for the table.
+
+    # If the search key is empty, then there is no way to have a hit
+    # versus a miss.  I do not know if the P4 language allows multiple
+    # actions in this case, but if so (because the 'default action'
+    # for the table is configurable as any one of several actions at
+    # run time), then handle that case.
+    num_actions = ret['num_actions']
+    search_key_width = match_field_info(table)['total_field_width']
+    if search_key_width > 0:
+        num_actions += 1
+    ret['result_width'] = (num_action_type_bits(num_actions) +
                            max_width)
     return ret
