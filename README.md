@@ -15,8 +15,24 @@ remaining dependencies:
 - `graphviz`
 
 
-To install:  
-sudo python setup.py install
+To install system wide:
+
+    sudo python setup.py install
+
+To install in your personal user directory (see
+https://docs.python.org/3/install/index.html for more documentation on
+setup options):
+
+    python setup.py install --user
+
+    # To see the base directory where this will install things:
+    python
+    >>> import site
+    >>> site.USER_BASE
+    '/Users/jafinger/Library/Python/2.7'
+
+    # Executables like p4-validate and p4-graphs will go in a 'bin'
+    # directory inside of site.USER_BASE.
 
 To run validate tool:  
 p4-validate \<path_to_p4_program\>
