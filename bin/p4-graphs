@@ -83,6 +83,16 @@ def get_parser():
                         P4 programs.  It does significantly reduce the number
                         of dependencies, which can make the drawn dependency
                         graphs have no redundant dependencies.""")
+    parser.add_argument('--dot-format', action='append', default = [],
+                        help="""The format to use when running 'dot' for
+                        generating visual graphs from .dot files.
+                        Use 'none' to skip this step, which can be useful
+                        for large P4 programs, and the dependency graphs
+                        can get larger if --deps-skip-transitive-reduction
+                        is specified.  The option can be given more than
+                        once, in which case stop when 'none' is found,
+                        or continue trying each format until the first
+                        one is run that returns non-error exit status.""")
     parser.add_argument('--primitives', action='append', default = [],
                         help="A JSON file which contains primitive declarations \
                         (to be used in addition to the standard ones)")
@@ -140,10 +150,16 @@ def main():
 
     basename = _get_p4_basename(args.source)
 
+    dot_formats = args.dot_format
+    if len(dot_formats) == 0:
+        dot_formats = ['png', 'eps']
     if "parser" in graphs_to_generate:
-        dot.export_parse_graph(h, basename, gen_dir)
+        dot.export_parse_graph(h, basename, gen_dir,
+                               dot_formats = dot_formats)
     if "table" in graphs_to_generate:
-        dot.export_table_graph(h, basename, gen_dir, predecessors=args.table_predecessors)
+        dot.export_table_graph(h, basename, gen_dir,
+                               predecessors=args.table_predecessors,
+                               dot_formats = dot_formats)
     if "deps" in graphs_to_generate:
         dot.export_table_dependency_graph(
             h, basename, gen_dir,
@@ -152,7 +168,8 @@ def main():
             show_condition_str = not args.deps_no_condition_labels,
             show_fields = not args.deps_no_fields_on_edges,
             debug_count_min_stages = args.deps_debug_count_min_stages,
-            debug_key_result_widths = args.debug_key_result_widths)
+            debug_key_result_widths = args.debug_key_result_widths,
+            dot_formats = dot_formats)
     
     pass
 
