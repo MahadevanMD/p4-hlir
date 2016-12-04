@@ -14,6 +14,7 @@
 
 import p4
 import sys
+import time
 from collections import defaultdict
 from dependencies import *
 import itertools
@@ -401,7 +402,20 @@ class rmt_table_graph():
         return self._validated
 
     # Remove redundant edges with a transitive reduction algo in O(n^3), called
-    # after resolving dependencies
+    # after resolving dependencies.
+    #
+    # Note, not written by original author: I do not know all the ins
+    # and outs of this code, but the following seem pretty clear from
+    # reading it:
+    #
+    # (a) It completely ignores existing dependencies with type_ <= 0,
+    # which are NOP, CONTROL_FLOW, and REDUNDANT types.  Makes sense.
+    # See the '> 0' and '<= 0' conditions in the code.
+    #
+    # (b) It doesn't actually remove dependencies between nodes, but
+    # it can change the dependency type from > 0 to REDUNDANT, which
+    # is 0.  I believe all dependencies <= 0 are also ignored by later
+    # code using these dependencies.
     def transitive_reduction(self):
         assert( self.validate() )
 
@@ -620,12 +634,26 @@ def annotate_hlir(hlir):
 
     for ingress_ptr in hlir.p4_ingress_ptr:
         ingress_graph = rmt_build_table_graph_ingress(hlir)
-        ingress_graph.transitive_reduction()
+        if hlir.analysis_args['do_transitive_reduction']:
+            time1 = time.time()
+            ingress_graph.transitive_reduction()
+            time2 = time.time()
+            print('transitive reduction on ingress dependency graph'
+                  ' took %.1f sec' % (time2 - time1))
+        else:
+            print('skipping transitive reduction on ingress dependency graph')
         ingress_graph.annotate_hlir()
 
     if hlir.p4_egress_ptr is not None:
         egress_graph = rmt_build_table_graph_egress(hlir)
-        egress_graph.transitive_reduction()
+        if hlir.analysis_args['do_transitive_reduction']:
+            time1 = time.time()
+            egress_graph.transitive_reduction()
+            time2 = time.time()
+            print('transitive reduction on egress dependency graph'
+                  ' took %.1f sec' % (time2 - time1))
+        else:
+            print('skipping transitive reduction on egress dependency graph')
         egress_graph.annotate_hlir()
 
     reset_state(include_valid = False)

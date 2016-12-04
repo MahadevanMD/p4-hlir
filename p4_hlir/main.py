@@ -73,6 +73,9 @@ class HLIR():
     def add_preprocessor_args (self, *args):
         self.preprocessor_args += args
 
+    def set_analysis_args (self, args):
+        self.analysis_args = args
+
     def add_src_txt(self, *args):
         self.source_txt += args
 

@@ -74,6 +74,15 @@ def get_parser():
                         produce extra debugging output showing how
                         the table search key and result widths were
                         calculated.""")
+    parser.add_argument('--deps-skip-transitive-reduction',
+                        action='store_true', default = False,
+                        help="""When drawing table dependency graphs,
+                        skip the step that minimizes the number of dependencies.
+                        It uses an O(N^3) algorithm for doing so, if it is
+                        not skipped, which can take a long time for larger
+                        P4 programs.  It does significantly reduce the number
+                        of dependencies, which can make the drawn dependency
+                        graphs have no redundant dependencies.""")
     parser.add_argument('--primitives', action='append', default = [],
                         help="A JSON file which contains primitive declarations \
                         (to be used in addition to the standard ones)")
@@ -116,6 +125,8 @@ def main():
     h = HLIR(args.source)
     for parg in preprocessor_args:
         h.add_preprocessor_args(parg)
+    h.set_analysis_args({'do_transitive_reduction':
+                         not args.deps_skip_transitive_reduction})
 
     for primitive_f in args.primitives:
         with open(primitive_f, 'r') as fp:
