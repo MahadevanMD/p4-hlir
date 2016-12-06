@@ -202,8 +202,13 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
     print
     print "INGRESS PIPELINE"
 
+    min_match_latency = 10
+    min_action_latency = 1
+
     filename_dot = os.path.join(gen_dir, filebase + ".ingress.tables_dep.dot")
-    graph = dependency_graph.build_table_graph_ingress(hlir)
+    graph = dependency_graph.build_table_graph_ingress(
+        hlir, min_match_latency=min_match_latency,
+        min_action_latency=min_action_latency)
     min_stages = graph.count_min_stages(
         show_conds = show_conds,
         debug = debug_count_min_stages,
@@ -223,7 +228,9 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
     print "EGRESS PIPELINE"
     if hlir.p4_egress_ptr:
         filename_dot = os.path.join(gen_dir, filebase + ".egress.tables_dep.dot")
-        graph = dependency_graph.build_table_graph_egress(hlir)
+        graph = dependency_graph.build_table_graph_egress(
+            hlir, min_match_latency=min_match_latency,
+            min_action_latency=min_action_latency)
         min_stages = graph.count_min_stages(
             show_conds = show_conds,
             debug = debug_count_min_stages,

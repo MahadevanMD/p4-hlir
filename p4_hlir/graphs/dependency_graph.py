@@ -38,6 +38,7 @@ class Dependency:
 class Node:
     CONDITION = 0
     TABLE = 1
+    TABLE_ACTION = 2
     def __init__(self, name, type_, p4_node):
         self.type_ = type_
         self.name = name
@@ -45,11 +46,21 @@ class Node:
         self.p4_node = p4_node
 
     def add_edge(self, node, edge):
+        if node in self.edges:
+            print('Trying to add second edge from node %s name %s'
+                  ' to node %s name %s'
+                  ' existing edge %s type %s'
+                  ' new edge %s type %s'
+                  '' % (self, self.name,
+                        node, node.name,
+                        self.edges[node], self.edges[node].type_,
+                        edge, edge.type_))
         assert(node not in self.edges)
         self.edges[node] = edge
 
 class Edge:
     def __init__(self, dep = None):
+        self.attributes = {}
         if not dep:
             self.type_ = Dependency.CONTROL_FLOW
             self.dep = None
@@ -263,8 +274,12 @@ class Graph:
                 
                 if edge.type_ != Dependency.CONTROL_FLOW and show_fields:
                     dep_fields = []
-                    for field in edge.dep.fields:
-                        dep_fields.append(str(field))
+                    # edge.dep can be None with my recent changes to
+                    # split tables into a separate match and action node,
+                    # because the edge between them has edge.dep of None.
+                    if edge.dep is not None:
+                        for field in edge.dep.fields:
+                            dep_fields.append(str(field))
                     dep_fields = sorted(dep_fields)
                     edge_label = "label=\"" + ",\n".join(dep_fields) + "\""
                     edge_label += " decorate=true"
@@ -327,10 +342,192 @@ def generate_graph(p4_root, name):
         
     return graph
 
+def _graph_add_new_node(graph, p4_node, min_match_latency):
+    """Like _graph_get_or_add_node, except the caller wants an exception
+    to be raised if they mistakenly try to add the same node more than
+    once.
+    """
+    node = graph.get_node(p4_node.name)
+    if node:
+        msg = ("graph %s already has a node with name %s"
+               "" % (graph, p4_node.name))
+        raise ValueError(msg)
+    if isinstance(p4_node, p4_hlir.hlir.p4_conditional_node):
+        node = Node(p4_node.name, Node.CONDITION, p4_node)
+        graph.add_node(node)
+        return {'match': node, 'action': node, 'edge': None}
+    else:
+        match_node = Node(p4_node.name + "_MATCH", Node.TABLE, p4_node)
+        action_node = Node(p4_node.name + "_ACTION", Node.TABLE_ACTION, p4_node)
+        graph.add_node(match_node)
+        graph.add_node(action_node)
+        edge = Edge()
+        # Probably a new dependency type might be reasonable here, but
+        # for now just use Dependency.MATCH
+        edge.type_ = Dependency.MATCH
+        assert(min_match_latency is not None)
+        edge.attributes['min_latency'] = min_match_latency
+        match_node.add_edge(action_node, edge)
+        return {'match': match_node, 'action': action_node, 'edge': edge}
+
+def generate_graph2(p4_root, name, min_match_latency, min_action_latency):
+
+    """This function is similar to generate_graph in some ways, but here
+    the intent is to represent table match events and table action
+    events as separate nodes, each with their own dependencies and
+    their own time that they can be scheduled relative to one another.
+
+       table match event - create and launch a search key.  A
+       processor could do nothing until the result returns, but more
+       interestingly it could do other things before the result comes
+       back, such as launching other search keys or doing actions that
+       do not depend upon the result.
+
+       table action event - use the result of an earlier table match
+       event, plus perhaps some local packet header fields.  Determine
+       which, if any, local packet fields to modify, and what their
+       new values should be.  Then write them.
+
+    There are also nodes for conditions, of which there is still only
+    one for each condition, which reads the fields involved in the
+    condition and calculates the boolean result.
+
+    """
+
+    graph = Graph(name)
+    name_to_nodes = {}
+    root_set = False
+
+    # Create all nodes first.  This allows us to ensure that
+    # name_to_nodes is defined for all nodes, before trying to add the
+    # edges.
+    next_tables = {p4_root}
+    visited = set()
+    while next_tables:
+        nt = next_tables.pop()
+        if nt in visited: continue
+        if not nt: continue
+        visited.add(nt)
+        nodes = _graph_add_new_node(graph, nt, min_match_latency)
+        name_to_nodes[nt.name] = nodes
+        if not root_set:
+            graph.set_root(nodes['match'])
+            root_set = True
+        next_ = set(nt.next_.values())
+        next_tables.update(next_)
+
+    # Now do another pass to add all edges
+    next_tables = {p4_root}
+    visited = set()
+    while next_tables:
+        nt = next_tables.pop()
+        if nt in visited: continue
+        if not nt: continue
+        visited.add(nt)
+
+        # Add edges for dependencies other than CONTROL_FLOW
+        nodes = name_to_nodes[nt.name]
+        for table, dep in nt.dependencies_for.items():
+            nodes_to = name_to_nodes[table.name]
+            edge = Edge(dep)
+            # TBD: Different cases here depending upon the type of
+            # dependency.
+            if edge.type_ == Dependency.MATCH:
+                edge.attributes['min_latency'] = min_action_latency
+                nodes['action'].add_edge(nodes_to['match'], edge)
+            elif edge.type_ == Dependency.ACTION:
+                # TBD: ACTION dependencies are currently created even
+                # if the 'from' table's action writes, and the 'to'
+                # table's action writes.  It seems most precise in
+                # that case to let the two actions to be scheduled
+                # simultaneously, or with the 'from' actions earlier.
+                # The only thing that should be disallowed is to
+                # schedule the 'from' actions later than the 'to'
+                # actions.
+                #
+                # For action write -> action read dependency, they
+                # should not be allowed to be scheduled
+                # simultaneously, e.g. second action should be at
+                # least 1 cycle later than the first (or whatever the
+                # minimum action to action latency is configured to
+                # be).
+                #
+                # For now, make these two cases the same by using the
+                # second kind of dependency, the more restrictive one
+                # for scheduling.
+                edge.attributes['min_latency'] = min_action_latency
+                nodes['action'].add_edge(nodes_to['action'], edge)
+            elif edge.type_ == Dependency.SUCCESSOR:
+                # TBD: Where should an edge be added for this kind of
+                # dependency?
+                #
+                # If 'from' is a table and 'to' is a table, maybe the
+                # most accurate way to do it is to make a dependency
+                # from the 'from' table's match event to the 'to'
+                # table's action event.  This would allow the 'to'
+                # table's match event to happen before the 'from'
+                # table's action event.  The 'to' table's action must
+                # be after the 'from' table's match event, but there
+                # would be no dependence between their action events,
+                # so they could be scheduled simultaneously.
+                #
+                # If either or both were a condition instead of a
+                # table, then that still seems reasonable.
+                if isinstance(nt, p4_hlir.hlir.p4_conditional_node):
+                    edge.attributes['min_latency'] = 0
+                else:
+                    edge.attributes['min_latency'] = min_match_latency
+                nodes['match'].add_edge(nodes_to['action'], edge)
+            elif edge.type_ == Dependency.REVERSE_READ:
+
+                # TBD: Most accurate way to do this would be an edge
+                # from the 'from' table's action event to the 'to'
+                # table's action event, if there is a common field
+                # read by 'from's action written by 'to's action, with
+                # 0 clock cycles of latency required.
+
+                # Or else, if there is no such common field, but there
+                # is one between the 'from' table's match event to
+                # 'to's action, then make the edge only between those
+                # events, again with 0 clock cycles of latency
+                # required.  They can be scheduled in the same clock
+                # cycle without a problem, I believe.
+
+                # For now, always do the first kind, the more
+                # restrictive one, to be safe.
+                edge.attributes['min_latency'] = 0
+                nodes['action'].add_edge(nodes_to['action'], edge)
+
+        # Add edges for CONTROL_FLOW dependencies
+        next_ = set(nt.next_.values())
+        for table in next_:
+            if table and table not in nt.dependencies_for:
+                nodes_to = name_to_nodes[table.name]
+                edge = Edge()
+                nodes['action'].add_edge(nodes_to['match'], edge)
+
+        next_tables.update(next_)
+        
+    return graph
+
 # returns a rmt_table_graph object for ingress
-def build_table_graph_ingress(hlir):
-    return generate_graph(hlir.p4_ingress_ptr.keys()[0], "ingress")
+def build_table_graph_ingress(hlir, min_match_latency=None,
+                              min_action_latency=None):
+    if True:
+        assert min_match_latency
+        assert min_action_latency
+        return generate_graph2(hlir.p4_ingress_ptr.keys()[0], "ingress",
+                               min_match_latency, min_action_latency)
+    else:
+        return generate_graph(hlir.p4_ingress_ptr.keys()[0], "ingress")
 
 # returns a rmt_table_graph object for egress
-def build_table_graph_egress(hlir):
-    return generate_graph(hlir.p4_egress_ptr, "egress")
+def build_table_graph_egress(hlir, min_match_latency=None,
+                             min_action_latency=None):
+    if True:
+        assert min_match_latency
+        assert min_action_latency
+        return generate_graph2(hlir.p4_egress_ptr, "egress",
+                               min_match_latency, min_action_latency)
+    else:
+        return generate_graph(hlir.p4_egress_ptr, "egress")
