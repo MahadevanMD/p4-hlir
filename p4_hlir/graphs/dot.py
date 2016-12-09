@@ -195,30 +195,51 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                                   show_fields = True,
                                   debug_count_min_stages = False,
                                   debug_key_result_widths = False,
-                                  dot_formats = ['png', 'eps']):
+                                  dot_formats = ['png', 'eps'],
+                                  split_match_action_events = False):
     print 
     print "TABLE DEPENDENCIES..."
 
     print
     print "INGRESS PIPELINE"
 
-    min_match_latency = 10
+    # TBD: Make these command line options
+    min_match_latency = 9
     min_action_latency = 1
+    almost_crit_path_delta = 2 * (min_action_latency + min_match_latency)
+    #almost_crit_path_delta = (min_action_latency + min_match_latency)
+    #almost_crit_path_delta = 0
+    only_crit_and_near_crit_edges = True
+    #only_crit_and_near_crit_edges = False
 
     filename_dot = os.path.join(gen_dir, filebase + ".ingress.tables_dep.dot")
     graph = dependency_graph.build_table_graph_ingress(
-        hlir, min_match_latency=min_match_latency,
+        hlir,
+        split_match_action_events=split_match_action_events,
+        min_match_latency=min_match_latency,
         min_action_latency=min_action_latency)
-    min_stages = graph.count_min_stages(
-        show_conds = show_conds,
-        debug = debug_count_min_stages,
-        debug_key_result_widths = debug_key_result_widths)
+    if split_match_action_events:
+        min_stages = graph.critical_path(
+            show_conds = show_conds,
+            debug = debug_count_min_stages,
+            debug_key_result_widths = debug_key_result_widths,
+            crit_path_edge_attr_name = 'on_crit_path',
+            almost_crit_path_edge_attr_name = 'almost_crit_path',
+            almost_crit_path_delta = almost_crit_path_delta)
+    else:
+        min_stages = graph.count_min_stages(
+            show_conds = show_conds,
+            debug = debug_count_min_stages,
+            debug_key_result_widths = debug_key_result_widths)
     print "pipeline ingress requires at least", min_stages, "stages"
     with open(filename_dot, 'w') as dotf:
         graph.generate_dot(out = dotf,
                            show_control_flow = show_control_flow,
                            show_condition_str = show_condition_str,
-                           show_fields = show_fields)
+                           show_fields = show_fields,
+                           only_crit_and_near_crit_edges = only_crit_and_near_crit_edges,
+                           crit_path_edge_attr_name = 'on_crit_path',
+                           almost_crit_path_edge_attr_name = 'almost_crit_path')
     
     generate_graph(filename_dot,
                    os.path.join(gen_dir, filebase + ".ingress.tables_dep"),
@@ -229,18 +250,32 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
     if hlir.p4_egress_ptr:
         filename_dot = os.path.join(gen_dir, filebase + ".egress.tables_dep.dot")
         graph = dependency_graph.build_table_graph_egress(
-            hlir, min_match_latency=min_match_latency,
+            hlir,
+            split_match_action_events=split_match_action_events,
+            min_match_latency=min_match_latency,
             min_action_latency=min_action_latency)
-        min_stages = graph.count_min_stages(
-            show_conds = show_conds,
-            debug = debug_count_min_stages,
-            debug_key_result_widths = debug_key_result_widths)
+        if split_match_action_events:
+            min_stages = graph.critical_path(
+                show_conds = show_conds,
+                debug = debug_count_min_stages,
+                debug_key_result_widths = debug_key_result_widths,
+                crit_path_edge_attr_name = 'on_crit_path',
+                almost_crit_path_edge_attr_name = 'almost_crit_path',
+                almost_crit_path_delta = almost_crit_path_delta)
+        else:
+            min_stages = graph.count_min_stages(
+                show_conds = show_conds,
+                debug = debug_count_min_stages,
+                debug_key_result_widths = debug_key_result_widths)
         print "pipeline egress requires at least", min_stages, "stages"
         with open(filename_dot, 'w') as dotf:
             graph.generate_dot(out = dotf,
                                show_control_flow = show_control_flow,
                                show_condition_str = show_condition_str,
-                               show_fields = show_fields)
+                               show_fields = show_fields,
+                               only_crit_and_near_crit_edges = only_crit_and_near_crit_edges,
+                               crit_path_edge_attr_name = 'on_crit_path',
+                               almost_crit_path_edge_attr_name = 'almost_crit_path')
 
         generate_graph(filename_dot,
                        os.path.join(gen_dir, filebase + ".egress.tables_dep"),

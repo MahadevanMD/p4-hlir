@@ -83,6 +83,11 @@ def get_parser():
                         P4 programs.  It does significantly reduce the number
                         of dependencies, which can make the drawn dependency
                         graphs have no redundant dependencies.""")
+    parser.add_argument('--split-match-action-events',
+                        action='store_true', default = False,
+                        help="""When drawing table dependency graphs and
+                        calculating a shortest path, use separate 'events'
+                        for a table's match and action portions.""")
     parser.add_argument('--dot-format', action='append', default = [],
                         help="""The format to use when running 'dot' for
                         generating visual graphs from .dot files.
@@ -132,6 +137,13 @@ def main():
             sys.exit(1)
     gen_dir = os.path.abspath(args.gen_dir)
 
+    if (args.split_match_action_events and
+        not args.deps_skip_transitive_reduction):
+        print("If you specify --split-match-action-events,"
+              " must also specify --deps-skip-transitive-reduction,"
+              " or else it can give incorrect scheduling results")
+        sys.exit(1)
+
     h = HLIR(args.source)
     for parg in preprocessor_args:
         h.add_preprocessor_args(parg)
@@ -169,7 +181,8 @@ def main():
             show_fields = not args.deps_no_fields_on_edges,
             debug_count_min_stages = args.deps_debug_count_min_stages,
             debug_key_result_widths = args.debug_key_result_widths,
-            dot_formats = dot_formats)
+            dot_formats = dot_formats,
+            split_match_action_events = args.split_match_action_events)
     
     pass
 

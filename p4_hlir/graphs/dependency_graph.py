@@ -127,6 +127,87 @@ class Graph:
 
         return has_cycle, sorted_list
 
+    def critical_path(self,  show_conds = False,
+                      debug = False,
+                      debug_key_result_widths = False,
+                      crit_path_edge_attr_name = None,
+                      almost_crit_path_edge_attr_name = None,
+                      almost_crit_path_delta = 20):
+        has_cycle, sorted_list = self.topo_sorting()
+        assert(not has_cycle)
+        max_path_so_far = {}
+        crit_path_edges_into = defaultdict(dict)
+        for table in sorted_list:
+            if table not in max_path_so_far:
+                max_path_so_far[table] = 0
+            for node_to, edge in table.edges.items():
+                if 'min_latency' in edge.attributes:
+                    this_path_len = (max_path_so_far[table] +
+                                     edge.attributes['min_latency'])
+                    table_on_a_crit_path = False
+                    if node_to in max_path_so_far:
+                        if this_path_len > max_path_so_far[node_to]:
+                            max_path_so_far[node_to] = this_path_len
+                            table_on_a_crit_path = True
+                            # Found new path longer than any
+                            # previously known, so clear out the
+                            # critical path edges remembered so far,
+                            # since they are definitely not any more.
+                            crit_path_edges_into[node_to] = {}
+                        elif this_path_len == max_path_so_far[node_to]:
+                            table_on_a_crit_path = True
+                    else:
+                        max_path_so_far[node_to] = this_path_len
+                        table_on_a_crit_path = True
+                    if table_on_a_crit_path:
+                        # Update list of tables/edges into node_to
+                        # that are on a critical path.
+                        crit_path_edges_into[node_to][table] = edge
+                else:
+                    # TBD: debug print to ensure this is as expected
+                    pass
+
+        tables_by_max_path = sorted(sorted_list,
+                                    key=lambda t: [max_path_so_far[t], t.name])
+        max_path_length = 0
+        for table in tables_by_max_path:
+            if max_path_so_far[table] > max_path_length:
+                max_path_length = max_path_so_far[table]
+            if table in crit_path_edges_into:
+                for from_table, edge in crit_path_edges_into[table].items():
+                    dname = Dependency._types.get(edge.type_, 'unknown')
+                    x = max_path_so_far[from_table]
+                    y = edge.attributes['min_latency']
+                    z = max_path_so_far[table]
+                    assert (x + y == z)
+                    print("%-35s %-3s  %3d+%2d = %3d  %s"
+                          "" % (from_table.name, dname[0:3],
+                                max_path_so_far[from_table],
+                                edge.attributes['min_latency'],
+                                max_path_so_far[table],
+                                table.name))
+                    if crit_path_edge_attr_name is not None:
+                        edge.attributes[crit_path_edge_attr_name] = True
+            else:
+                assert (max_path_so_far[table] == 0)
+                print("%-35s %-3s  %8s %3d  %s"
+                      "" % ("(no predecessor)", "-", "",
+                            max_path_so_far[table], table.name))
+
+        if almost_crit_path_edge_attr_name is not None:
+            for table in sorted_list:
+                for node_to, edge in table.edges.items():
+                    y = edge.attributes.get('min_latency', None)
+                    if y is None:
+                        continue
+                    x = max_path_so_far[from_table]
+                    z = max_path_so_far[table]
+                    if (x + y < z) and (x + y > z - almost_crit_path_delta):
+                        edge.attributes[almost_crit_path_edge_attr_name] = True
+
+        return max_path_length
+
+        
     def count_min_stages(self, show_conds = False,
                          debug = False,
                          debug_key_result_widths = False):
@@ -237,12 +318,18 @@ class Graph:
     def generate_dot(self, out = sys.stdout,
                      show_control_flow = True,
                      show_condition_str = True,
-                     show_fields = True):
+                     show_fields = True,
+                     only_crit_and_near_crit_edges = False,
+                     crit_path_edge_attr_name = None,
+                     almost_crit_path_edge_attr_name = None):
+        print("dbg: only_crit_and_near_crit_edges=%s"
+              "" % (only_crit_and_near_crit_edges))
         styles = {Dependency.CONTROL_FLOW: "style=dotted",
                   Dependency.REVERSE_READ: "color=orange",
                   Dependency.SUCCESSOR: "color=green",
                   Dependency.ACTION: "color=blue",
                   Dependency.MATCH: "color=red"}
+        on_crit_path_style = "style=bold"
         out.write("digraph " + self.name + " {\n")
 
         # The uses of the 'sorted' function below are not necessary
@@ -271,6 +358,11 @@ class Graph:
                 edge = node.edges[node_to]
                 if not show_control_flow and edge.type_ == Dependency.CONTROL_FLOW:
                     continue
+#                if only_crit_and_near_crit_edges and node.type_ != Node.CONDITION :
+                if only_crit_and_near_crit_edges:
+                    if not (edge.attributes.get(crit_path_edge_attr_name, False) or
+                            edge.attributes.get(almost_crit_path_edge_attr_name, False)):
+                        continue
                 
                 if edge.type_ != Dependency.CONTROL_FLOW and show_fields:
                     dep_fields = []
@@ -291,8 +383,12 @@ class Graph:
                         edge_label += " arrowhead = diamond"
                     else:
                         edge_label += " arrowhead = dot"
+                extra_style = ""
+                if only_crit_and_near_crit_edges:
+                    if edge.attributes.get(crit_path_edge_attr_name, False):
+                        extra_style = " " + on_crit_path_style
                 out.write(node.name + " -> " + node_to.name +\
-                          " [" + styles[edge.type_] +\
+                          " [" + styles[edge.type_] + extra_style + \
                           " " + edge_label + "]" + ";\n")
         out.write("}\n")
 
@@ -511,9 +607,10 @@ def generate_graph2(p4_root, name, min_match_latency, min_action_latency):
     return graph
 
 # returns a rmt_table_graph object for ingress
-def build_table_graph_ingress(hlir, min_match_latency=None,
+def build_table_graph_ingress(hlir, split_match_action_events=False,
+                              min_match_latency=None,
                               min_action_latency=None):
-    if True:
+    if split_match_action_events:
         assert min_match_latency
         assert min_action_latency
         return generate_graph2(hlir.p4_ingress_ptr.keys()[0], "ingress",
@@ -522,9 +619,10 @@ def build_table_graph_ingress(hlir, min_match_latency=None,
         return generate_graph(hlir.p4_ingress_ptr.keys()[0], "ingress")
 
 # returns a rmt_table_graph object for egress
-def build_table_graph_egress(hlir, min_match_latency=None,
+def build_table_graph_egress(hlir, split_match_action_events=False,
+                             min_match_latency=None,
                              min_action_latency=None):
-    if True:
+    if split_match_action_events:
         assert min_match_latency
         assert min_action_latency
         return generate_graph2(hlir.p4_egress_ptr, "egress",
