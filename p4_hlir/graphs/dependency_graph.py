@@ -392,8 +392,6 @@ class Graph:
                      only_crit_and_near_crit_edges = False,
                      crit_path_edge_attr_name = None,
                      almost_crit_path_edge_attr_name = None):
-        print("dbg: only_crit_and_near_crit_edges=%s"
-              "" % (only_crit_and_near_crit_edges))
         styles = {Dependency.CONTROL_FLOW: "style=dotted",
                   Dependency.REVERSE_READ: "color=orange",
                   Dependency.SUCCESSOR: "color=green",

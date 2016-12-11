@@ -209,8 +209,7 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
     almost_crit_path_delta = 2 * (min_action_latency + min_match_latency)
     #almost_crit_path_delta = (min_action_latency + min_match_latency)
     #almost_crit_path_delta = 0
-    only_crit_and_near_crit_edges = True
-    #only_crit_and_near_crit_edges = False
+    only_crit_and_near_crit_edges = split_match_action_events
 
     filename_dot = os.path.join(gen_dir, filebase + ".ingress.tables_dep.dot")
     graph = dependency_graph.build_table_graph_ingress(
@@ -283,15 +282,11 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                 debug_key_result_widths = debug_key_result_widths)
         print "pipeline egress requires at least", min_stages, "stages"
         with open(filename_dot, 'w') as dotf:
-            if split_match_action_events:
-                tmp = only_crit_and_near_crit_edges
-            else:
-                tmp = False
             graph.generate_dot(out = dotf,
                                show_control_flow = show_control_flow,
                                show_condition_str = show_condition_str,
                                show_fields = show_fields,
-                               only_crit_and_near_crit_edges = tmp,
+                               only_crit_and_near_crit_edges = only_crit_and_near_crit_edges,
                                crit_path_edge_attr_name = 'on_forward_crit_path',
                                almost_crit_path_edge_attr_name = 'almost_forward_crit_path')
 
