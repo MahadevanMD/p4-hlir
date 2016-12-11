@@ -14,6 +14,7 @@
 
 import p4_hlir.hlir
 import sys
+import copy
 import pprint
 from collections import defaultdict
 from p4_hlir.hlir.dependencies import *
@@ -127,21 +128,55 @@ class Graph:
 
         return has_cycle, sorted_list
 
-    def critical_path(self,  show_conds = False,
+    def critical_path(self, direction, show_conds = False,
                       debug = False,
                       debug_key_result_widths = False,
                       crit_path_edge_attr_name = None,
                       almost_crit_path_edge_attr_name = None,
                       almost_crit_path_delta = 20):
-        has_cycle, sorted_list = self.topo_sorting()
+
+        # If direction == 'forward', calculate the longest paths from
+        # the beginning (nodes with no in-edges) to the end (nodes
+        # with on out-edges).  This gives the earliest time that each
+        # node can be scheduled, subject to the constraints specified
+        # by the edges.
+
+        # If direction == 'backward', calculate the longest paths from
+        # the end back to the beginning, following edges in the
+        # reverse direction.  If we take those path lengths x and
+        # replace them with (max_path_length - x), that should give
+        # the latest time that each node can be scheduled, subject to
+        # the constraints specified by the edges.
+
+        has_cycle, forward_sorted_list = self.topo_sorting()
         assert(not has_cycle)
+        dir_edges = {}
+        
+        if direction == 'forward':
+            sorted_list = copy.copy(forward_sorted_list)
+            for node_from in forward_sorted_list:
+                dir_edges[node_from] = node_from.edges
+        else:
+            # Calculate set of edges into each node, from the forward
+            # edges.
+            sorted_list = copy.copy(forward_sorted_list)
+            sorted_list.reverse()
+            for node_to in sorted_list:
+                dir_edges[node_to] = {}
+            # In this for loop 'node_from' and 'node_to' are the
+            # direction of the edge in the original dependencies.  In
+            # dir_edges we are intentionally reversing that direction.
+            for node_from in sorted_list:
+                for node_to, edge in node_from.edges.items():
+                    dir_edges[node_to][node_from] = edge
+
         max_path_so_far = {}
         crit_path_edges_into = defaultdict(dict)
         for table in sorted_list:
             if table not in max_path_so_far:
                 max_path_so_far[table] = 0
-            for node_to, edge in table.edges.items():
-                if 'min_latency' in edge.attributes:
+            for node_to, edge in dir_edges[table].items():
+                if edge.type_ > 0 and 'min_latency' in edge.attributes:
                     this_path_len = (max_path_so_far[table] +
                                      edge.attributes['min_latency'])
                     table_on_a_crit_path = False
@@ -164,32 +199,67 @@ class Graph:
                         # that are on a critical path.
                         crit_path_edges_into[node_to][table] = edge
                 else:
-                    # TBD: debug print to ensure this is as expected
-                    pass
+                    assert(edge.type_ <= 0)
+                    assert('min_latency' not in edge.attributes)
+#                    print('dbg critical_path found an edge with no min_latency'
+#                          ' attributes: from %s to %s type_ %s'
+#                          '' % (table.name, node_to.name, edge.type_))
 
-        tables_by_max_path = sorted(sorted_list,
-                                    key=lambda t: [max_path_so_far[t], t.name])
         max_path_length = 0
-        for table in tables_by_max_path:
+        for table in sorted_list:
             if max_path_so_far[table] > max_path_length:
                 max_path_length = max_path_so_far[table]
+
+        if direction == 'backward':
+            # Replace maximum paths x with (max_path_length - x)
+            for table in sorted_list:
+                max_path_so_far[table] = (max_path_length -
+                                          max_path_so_far[table])
+
+        if debug:
+            print('')
+            print('')
+            print('direction %s' % (direction))
+            print('')
+        tables_by_max_path = sorted(sorted_list,
+                                    key=lambda t: [max_path_so_far[t], t.name])
+        for table in tables_by_max_path:
             if table in crit_path_edges_into:
                 for from_table, edge in crit_path_edges_into[table].items():
                     dname = Dependency._types.get(edge.type_, 'unknown')
                     x = max_path_so_far[from_table]
                     y = edge.attributes['min_latency']
                     z = max_path_so_far[table]
+                    if direction == 'forward':
+                        print_op = '+'
+                    if direction == 'backward':
+                        print_op = '-'
+                        y = -y
+                    if x + y != z:
+                        print('dbg assert direction %s'
+                              ' from_table.name %s max_path %s'
+                              ' table.name %s max_path %s'
+                              ' edge.type_ %s dname %s min_latency %s'
+                              '' % (direction,
+                                    from_table.name, x,
+                                    table.name, z,
+                                    edge.type_, dname, y))
                     assert (x + y == z)
-                    print("%-35s %-3s  %3d+%2d = %3d  %s"
-                          "" % (from_table.name, dname[0:3],
-                                max_path_so_far[from_table],
-                                edge.attributes['min_latency'],
-                                max_path_so_far[table],
-                                table.name))
+                    if debug:
+                        print("%-35s %-3s  %3d%s%2d = %3d  %s"
+                              "" % (from_table.name, dname[0:3],
+                                    max_path_so_far[from_table],
+                                    print_op,
+                                    edge.attributes['min_latency'],
+                                    max_path_so_far[table],
+                                    table.name))
                     if crit_path_edge_attr_name is not None:
                         edge.attributes[crit_path_edge_attr_name] = True
             else:
-                assert (max_path_so_far[table] == 0)
+                if direction == 'forward':
+                    assert (max_path_so_far[table] == 0)
+                elif direction == 'backward':
+                    assert (max_path_so_far[table] == max_path_length)
                 print("%-35s %-3s  %8s %3d  %s"
                       "" % ("(no predecessor)", "-", "",
                             max_path_so_far[table], table.name))
@@ -438,7 +508,7 @@ def generate_graph(p4_root, name):
         
     return graph
 
-def _graph_add_new_node(graph, p4_node, min_match_latency):
+def _graph_add_new_node_pair(graph, p4_node, min_match_latency):
     """Like _graph_get_or_add_node, except the caller wants an exception
     to be raised if they mistakenly try to add the same node more than
     once.
@@ -504,7 +574,7 @@ def generate_graph2(p4_root, name, min_match_latency, min_action_latency):
         if nt in visited: continue
         if not nt: continue
         visited.add(nt)
-        nodes = _graph_add_new_node(graph, nt, min_match_latency)
+        nodes = _graph_add_new_node_pair(graph, nt, min_match_latency)
         name_to_nodes[nt.name] = nodes
         if not root_set:
             graph.set_root(nodes['match'])
