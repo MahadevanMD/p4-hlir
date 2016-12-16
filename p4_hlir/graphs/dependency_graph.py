@@ -170,29 +170,29 @@ class Graph:
                 for node_to, edge in node_from.edges.items():
                     dir_edges[node_to][node_from] = edge
 
-        max_path_so_far = {}
+        max_path = {}
         crit_path_edges_into = defaultdict(dict)
         for table in sorted_list:
-            if table not in max_path_so_far:
-                max_path_so_far[table] = 0
+            if table not in max_path:
+                max_path[table] = 0
             for node_to, edge in dir_edges[table].items():
                 if edge.type_ > 0 and 'min_latency' in edge.attributes:
-                    this_path_len = (max_path_so_far[table] +
+                    this_path_len = (max_path[table] +
                                      edge.attributes['min_latency'])
                     table_on_a_crit_path = False
-                    if node_to in max_path_so_far:
-                        if this_path_len > max_path_so_far[node_to]:
-                            max_path_so_far[node_to] = this_path_len
+                    if node_to in max_path:
+                        if this_path_len > max_path[node_to]:
+                            max_path[node_to] = this_path_len
                             table_on_a_crit_path = True
                             # Found new path longer than any
                             # previously known, so clear out the
                             # critical path edges remembered so far,
                             # since they are definitely not any more.
                             crit_path_edges_into[node_to] = {}
-                        elif this_path_len == max_path_so_far[node_to]:
+                        elif this_path_len == max_path[node_to]:
                             table_on_a_crit_path = True
                     else:
-                        max_path_so_far[node_to] = this_path_len
+                        max_path[node_to] = this_path_len
                         table_on_a_crit_path = True
                     if table_on_a_crit_path:
                         # Update list of tables/edges into node_to
@@ -207,14 +207,13 @@ class Graph:
 
         max_path_length = 0
         for table in sorted_list:
-            if max_path_so_far[table] > max_path_length:
-                max_path_length = max_path_so_far[table]
+            if max_path[table] > max_path_length:
+                max_path_length = max_path[table]
 
         if direction == 'backward':
             # Replace maximum paths x with (max_path_length - x)
             for table in sorted_list:
-                max_path_so_far[table] = (max_path_length -
-                                          max_path_so_far[table])
+                max_path[table] = (max_path_length - max_path[table])
 
         if debug:
             print('')
@@ -222,14 +221,14 @@ class Graph:
             print('direction %s' % (direction))
             print('')
         tables_by_max_path = sorted(sorted_list,
-                                    key=lambda t: [max_path_so_far[t], t.name])
+                                    key=lambda t: [max_path[t], t.name])
         for table in tables_by_max_path:
             if table in crit_path_edges_into:
                 for from_table, edge in crit_path_edges_into[table].items():
                     dname = Dependency._types.get(edge.type_, 'unknown')
-                    x = max_path_so_far[from_table]
+                    x = max_path[from_table]
                     y = edge.attributes['min_latency']
-                    z = max_path_so_far[table]
+                    z = max_path[table]
                     if direction == 'forward':
                         print_op = '+'
                     if direction == 'backward':
@@ -248,21 +247,21 @@ class Graph:
                     if debug:
                         print("%-35s %-3s  %3d%s%2d = %3d  %s"
                               "" % (from_table.name, dname[0:3],
-                                    max_path_so_far[from_table],
+                                    max_path[from_table],
                                     print_op,
                                     edge.attributes['min_latency'],
-                                    max_path_so_far[table],
+                                    max_path[table],
                                     table.name))
                     if crit_path_edge_attr_name is not None:
                         edge.attributes[crit_path_edge_attr_name] = True
             else:
                 if direction == 'forward':
-                    assert (max_path_so_far[table] == 0)
+                    assert (max_path[table] == 0)
                 elif direction == 'backward':
-                    assert (max_path_so_far[table] == max_path_length)
+                    assert (max_path[table] == max_path_length)
                 print("%-35s %-3s  %8s %3d  %s"
                       "" % ("(no predecessor)", "-", "",
-                            max_path_so_far[table], table.name))
+                            max_path[table], table.name))
 
         if almost_crit_path_edge_attr_name is not None:
             for table in sorted_list:
@@ -270,12 +269,12 @@ class Graph:
                     y = edge.attributes.get('min_latency', None)
                     if y is None:
                         continue
-                    x = max_path_so_far[from_table]
-                    z = max_path_so_far[table]
+                    x = max_path[from_table]
+                    z = max_path[table]
                     if (x + y < z) and (x + y > z - almost_crit_path_delta):
                         edge.attributes[almost_crit_path_edge_attr_name] = True
 
-        return max_path_length
+        return max_path_length, max_path
 
         
     def count_min_stages(self, show_conds = False,
@@ -389,8 +388,11 @@ class Graph:
                      show_control_flow = True,
                      show_condition_str = True,
                      show_fields = True,
+                     earliest_time = None,
+                     latest_time = None,
                      only_crit_and_near_crit_edges = False,
-                     crit_path_edge_attr_name = None,
+                     forward_crit_path_edge_attr_name = None,
+                     backward_crit_path_edge_attr_name = None,
                      almost_crit_path_edge_attr_name = None):
         styles = {Dependency.CONTROL_FLOW: "style=dotted",
                   Dependency.REVERSE_READ: "color=orange",
@@ -398,6 +400,7 @@ class Graph:
                   Dependency.ACTION: "color=blue",
                   Dependency.MATCH: "color=red"}
         on_crit_path_style = "style=bold"
+        off_crit_path_style = "style=dotted"
         out.write("digraph " + self.name + " {\n")
 
         # The uses of the 'sorted' function below are not necessary
@@ -412,12 +415,26 @@ class Graph:
 
         # set conditional tables to be represented as boxes
         for node in nodes_by_name:
-            if node.type_ != Node.CONDITION: continue
-            label = node.name
-            if show_condition_str:
-                label += "\\n" + str(node.p4_node.condition)
-            label = "label=\"" + label + "\""
-            out.write(node.name + " [shape=box " + label + "];\n")
+            node_attrs = ""
+            node_label = node.name
+            if node.type_ == Node.CONDITION:
+                node_attrs = " shape=box"
+                if show_condition_str:
+                    node_label += "\\n" + str(node.p4_node.condition)
+            # TBD: Add optional labels for table match/action nodes
+            early = "-"
+            if earliest_time and node in earliest_time:
+                early = "%s" % (earliest_time[node])
+            late = "-"
+            if latest_time and node in latest_time:
+                late = "%s" % (latest_time[node])
+            node_label += "\\n" + early + "," + late
+            node_attrs += " label=\"" + node_label + "\""
+            if early == late and early != "-":
+                node_attrs += " style=bold"
+            else:
+                node_attrs += " style=dotted"
+            out.write(node.name + " [" + node_attrs + "];\n")
 
         for node in nodes_by_name:
             node_tos_by_name = sorted(list(node.edges.keys()),
@@ -428,10 +445,12 @@ class Graph:
                     continue
 #                if only_crit_and_near_crit_edges and node.type_ != Node.CONDITION :
                 if only_crit_and_near_crit_edges:
-                    if not (edge.attributes.get(crit_path_edge_attr_name, False) or
-                            edge.attributes.get(almost_crit_path_edge_attr_name, False)):
+                    if not (edge.attributes.get(forward_crit_path_edge_attr_name, False) or
+                            edge.attributes.get(backward_crit_path_edge_attr_name, False)):
                         continue
                 
+                edge_label = ""
+                edge_attrs = ""
                 if edge.type_ != Dependency.CONTROL_FLOW and show_fields:
                     dep_fields = []
                     # edge.dep can be None with my recent changes to
@@ -441,23 +460,36 @@ class Graph:
                         for field in edge.dep.fields:
                             dep_fields.append(str(field))
                     dep_fields = sorted(dep_fields)
-                    edge_label = "label=\"" + ",\n".join(dep_fields) + "\""
-                    edge_label += " decorate=true"
-                else:
-                    edge_label = ""
+                    edge_label = ",\n".join(dep_fields)
                     
                 if edge.type_ == Dependency.SUCCESSOR and type(edge.dep.value) is bool:
                     if edge.dep.value == False:
-                        edge_label += " arrowhead = diamond"
+                        edge_attrs += " arrowhead = diamond"
                     else:
-                        edge_label += " arrowhead = dot"
-                extra_style = ""
+                        edge_attrs += " arrowhead = dot"
                 if only_crit_and_near_crit_edges:
-                    if edge.attributes.get(crit_path_edge_attr_name, False):
-                        extra_style = " " + on_crit_path_style
+                    fwd = edge.attributes.get(forward_crit_path_edge_attr_name,
+                                              False)
+                    bkwd = edge.attributes.get(backward_crit_path_edge_attr_name,
+                                               False)
+                    if fwd and bkwd:
+                        edge_attrs += " " + on_crit_path_style
+                    elif fwd:
+                        if edge_label != "":
+                            edge_label = "\n" + edge_label
+                        edge_label = "f" + edge_label
+                        edge_attrs += " " + off_crit_path_style
+                    elif bkwd:
+                        if edge_label != "":
+                            edge_label = "\n" + edge_label
+                        edge_label = "b" + edge_label
+                        edge_attrs += " " + off_crit_path_style
+                if edge_label != "":
+                    edge_attrs = ("label=\"" + edge_label + "\"" +
+                                  " decorate=true " + edge_attrs)
                 out.write(node.name + " -> " + node_to.name +\
-                          " [" + styles[edge.type_] + extra_style + \
-                          " " + edge_label + "]" + ";\n")
+                          " [" + styles[edge.type_] + \
+                          " " + edge_attrs + "]" + ";\n")
         out.write("}\n")
 
 def _graph_get_or_add_node(graph, p4_node):

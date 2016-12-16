@@ -218,35 +218,48 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
         min_match_latency=min_match_latency,
         min_action_latency=min_action_latency)
     if split_match_action_events:
-        min_stages = graph.critical_path('forward',
+        forward_crit_path_len, earliest_time = graph.critical_path(
+            'forward',
             show_conds = show_conds,
             debug = debug_count_min_stages,
             debug_key_result_widths = debug_key_result_widths,
             crit_path_edge_attr_name = 'on_forward_crit_path',
             almost_crit_path_edge_attr_name = 'almost_forward_crit_path',
             almost_crit_path_delta = almost_crit_path_delta)
-        min_stages = graph.critical_path('backward',
+        backward_crit_path_len, latest_time = graph.critical_path(
+            'backward',
             show_conds = show_conds,
             debug = debug_count_min_stages,
             debug_key_result_widths = debug_key_result_widths,
             crit_path_edge_attr_name = 'on_backward_crit_path',
             almost_crit_path_edge_attr_name = 'almost_backward_crit_path',
             almost_crit_path_delta = almost_crit_path_delta)
+        if forward_crit_path_len != backward_crit_path_len:
+            print("forward and backward critical path length calculations"
+                  " give different answers -- possible bug: %d vs. %d"
+                  "" % (forward_crit_path_len, backward_crit_path_len))
+        min_stages = forward_crit_path_len
     else:
         min_stages = graph.count_min_stages(
             show_conds = show_conds,
             debug = debug_count_min_stages,
             debug_key_result_widths = debug_key_result_widths)
+        earliest_time = None
+        latest_time = None
     print "pipeline ingress requires at least", min_stages, "stages"
     with open(filename_dot, 'w') as dotf:
-        graph.generate_dot(out = dotf,
-                           show_control_flow = show_control_flow,
-                           show_condition_str = show_condition_str,
-                           show_fields = show_fields,
-                           only_crit_and_near_crit_edges = only_crit_and_near_crit_edges,
-                           crit_path_edge_attr_name = 'on_forward_crit_path',
-                           almost_crit_path_edge_attr_name = 'almost_forward_crit_path')
-    
+        graph.generate_dot(
+            out = dotf,
+            show_control_flow = show_control_flow,
+            show_condition_str = show_condition_str,
+            show_fields = show_fields,
+            earliest_time = earliest_time,
+            latest_time = latest_time,
+            only_crit_and_near_crit_edges = only_crit_and_near_crit_edges,
+            forward_crit_path_edge_attr_name = 'on_forward_crit_path',
+            backward_crit_path_edge_attr_name = 'on_backward_crit_path',
+            almost_crit_path_edge_attr_name = 'almost_forward_crit_path')
+
     generate_graph(filename_dot,
                    os.path.join(gen_dir, filebase + ".ingress.tables_dep"),
                    dot_formats)
@@ -261,34 +274,47 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
             min_match_latency=min_match_latency,
             min_action_latency=min_action_latency)
         if split_match_action_events:
-            min_stages = graph.critical_path('forward',
+            forward_crit_path_len, earliest_time = graph.critical_path(
+                'forward',
                 show_conds = show_conds,
                 debug = debug_count_min_stages,
                 debug_key_result_widths = debug_key_result_widths,
                 crit_path_edge_attr_name = 'on_forward_crit_path',
                 almost_crit_path_edge_attr_name = 'almost_forward_crit_path',
                 almost_crit_path_delta = almost_crit_path_delta)
-            min_stages = graph.critical_path('backward',
+            backward_crit_path_len, latest_time = graph.critical_path(
+                'backward',
                 show_conds = show_conds,
                 debug = debug_count_min_stages,
                 debug_key_result_widths = debug_key_result_widths,
                 crit_path_edge_attr_name = 'on_backward_crit_path',
                 almost_crit_path_edge_attr_name = 'almost_backward_crit_path',
                 almost_crit_path_delta = almost_crit_path_delta)
+            if forward_crit_path_len != backward_crit_path_len:
+                print("forward and backward critical path length calculations"
+                      " give different answers -- possible bug: %d vs. %d"
+                      "" % (forward_crit_path_len, backward_crit_path_len))
+            min_stages = forward_crit_path_len
         else:
             min_stages = graph.count_min_stages(
                 show_conds = show_conds,
                 debug = debug_count_min_stages,
                 debug_key_result_widths = debug_key_result_widths)
+            earliest_time = None
+            latest_time = None
         print "pipeline egress requires at least", min_stages, "stages"
         with open(filename_dot, 'w') as dotf:
-            graph.generate_dot(out = dotf,
-                               show_control_flow = show_control_flow,
-                               show_condition_str = show_condition_str,
-                               show_fields = show_fields,
-                               only_crit_and_near_crit_edges = only_crit_and_near_crit_edges,
-                               crit_path_edge_attr_name = 'on_forward_crit_path',
-                               almost_crit_path_edge_attr_name = 'almost_forward_crit_path')
+            graph.generate_dot(
+                out = dotf,
+                show_control_flow = show_control_flow,
+                show_condition_str = show_condition_str,
+                show_fields = show_fields,
+                earliest_time = earliest_time,
+                latest_time = latest_time,
+                only_crit_and_near_crit_edges = only_crit_and_near_crit_edges,
+                forward_crit_path_edge_attr_name = 'on_forward_crit_path',
+                backward_crit_path_edge_attr_name = 'on_backward_crit_path',
+                almost_crit_path_edge_attr_name = 'almost_forward_crit_path')
 
         generate_graph(filename_dot,
                        os.path.join(gen_dir, filebase + ".egress.tables_dep"),
