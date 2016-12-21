@@ -20,6 +20,15 @@ from p4_hlir.hlir.dependencies import *
 import hlir_info as info
 import p4_hlir.hlir.p4_imperatives as p4_imperatives
 
+
+def munge_condition_str(s):
+    """if conditions can be quite long.  In practice the graphs can be a
+    bit less unwieldy if conditions containing and/or are split
+    across multiple lines.
+    """
+    return s.replace(' and ', ' and\n').replace(' or ', ' or\n')
+
+
 class Dependency:
     CONTROL_FLOW = 0
     REVERSE_READ = 1
@@ -250,7 +259,8 @@ class Graph:
             if node.type_ != Node.CONDITION: continue
             label = node.name
             if show_condition_str:
-                label += "\\n" + str(node.p4_node.condition)
+                label += ("\\n" +
+                          munge_condition_str(str(node.p4_node.condition)))
             label = "label=\"" + label + "\""
             out.write(node.name + " [shape=box " + label + "];\n")
 
