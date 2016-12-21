@@ -18,6 +18,7 @@ import pprint
 from collections import defaultdict
 from p4_hlir.hlir.dependencies import *
 import hlir_info as info
+import p4_hlir.hlir.p4_imperatives as p4_imperatives
 
 class Dependency:
     CONTROL_FLOW = 0
@@ -271,11 +272,22 @@ class Graph:
                 else:
                     edge_label = ""
                     
-                if edge.type_ == Dependency.SUCCESSOR and type(edge.dep.value) is bool:
-                    if edge.dep.value == False:
-                        edge_label += " arrowhead = diamond"
+                if edge.type_ == Dependency.SUCCESSOR:
+                    if isinstance(edge.dep.value, bool):
+                        if edge.dep.value == False:
+                            edge_label += ' label="False" arrowhead = diamond'
+                        else:
+                            edge_label += ' label="True"'
+                    elif isinstance(edge.dep.value, p4_imperatives.p4_action):
+                        edge_label += ' label="' + edge.dep.value.name + '"'
+                    elif isinstance(edge.dep.value, tuple):
+                        tmp_names = map(lambda v: v.name, edge.dep.value)
+                        edge_label += ' label="' + ',\n'.join(tmp_names) + '"'
                     else:
-                        edge_label += " arrowhead = dot"
+                        print("dbg successor type(edge.dep.value) %s"
+                              " edge.dep.value=%s"
+                              "" % (type(edge.dep.value), edge.dep.value))
+                        assert False
                 out.write(node.name + " -> " + node_to.name +\
                           " [" + styles[edge.type_] +\
                           " " + edge_label + "]" + ";\n")
