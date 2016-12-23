@@ -260,6 +260,7 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
             earliest_time = None
             latest_time = None
         print "pipeline", pipeline, "requires at least", min_stages, "stages"
+        show_min_max_scheduled_times = split_match_action_events
         with open(filename_dot, 'w') as dotf:
             graph.generate_dot(
                 out = dotf,
@@ -268,6 +269,7 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                 show_fields = show_fields,
                 earliest_time = earliest_time,
                 latest_time = latest_time,
+                show_min_max_scheduled_times = show_min_max_scheduled_times,
                 only_crit_and_near_crit_edges = only_crit_and_near_crit_edges,
                 forward_crit_path_edge_attr_name = 'on_forward_crit_path',
                 backward_crit_path_edge_attr_name = 'on_backward_crit_path',

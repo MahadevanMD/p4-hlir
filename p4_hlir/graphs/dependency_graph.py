@@ -19,6 +19,16 @@ import pprint
 from collections import defaultdict
 from p4_hlir.hlir.dependencies import *
 import hlir_info as info
+import p4_hlir.hlir.p4_imperatives as p4_imperatives
+
+
+def munge_condition_str(s):
+    """if conditions can be quite long.  In practice the graphs can be a
+    bit less unwieldy if conditions containing and/or are split
+    across multiple lines.
+    """
+    return s.replace(' and ', ' and\n').replace(' or ', ' or\n')
+
 
 class Dependency:
     CONTROL_FLOW = 0
@@ -401,7 +411,7 @@ class Graph:
                   Dependency.ACTION: "color=blue",
                   Dependency.MATCH: "color=red"}
         on_crit_path_style = "style=bold"
-        off_crit_path_style = "style=dotted"
+        off_crit_path_style = "style=dashed"
         out.write("digraph " + self.name + " {\n")
 
         # The uses of the 'sorted' function below are not necessary
@@ -421,7 +431,9 @@ class Graph:
             if node.type_ == Node.CONDITION:
                 node_attrs = " shape=box"
                 if show_condition_str:
-                    node_label += "\\n" + str(node.p4_node.condition)
+                    node_label += (
+                        "\\n" +
+                        munge_condition_str(str(node.p4_node.condition)))
             if show_min_max_scheduled_times:
                 early = "-"
                 if earliest_time and node in earliest_time:
@@ -435,7 +447,7 @@ class Graph:
                 if early == late and early != "-":
                     node_attrs += " style=bold"
                 else:
-                    node_attrs += " style=dotted"
+                    node_attrs += " style=dashed"
             out.write(node.name + " [" + node_attrs + "];\n")
 
         for node in nodes_by_name:
@@ -446,8 +458,11 @@ class Graph:
                 if not show_control_flow and edge.type_ == Dependency.CONTROL_FLOW:
                     continue
                 if only_crit_and_near_crit_edges:
-                    if not (edge.attributes.get(forward_crit_path_edge_attr_name, False) or
-                            edge.attributes.get(backward_crit_path_edge_attr_name, False)):
+                    fwd = edge.attributes.get(forward_crit_path_edge_attr_name,
+                                              False)
+                    bkwd = edge.attributes.get(backward_crit_path_edge_attr_name,
+                                               False)
+                    if not (fwd or bkwd):
                         continue
                 
                 edge_label = ""
@@ -463,27 +478,40 @@ class Graph:
                     dep_fields = sorted(dep_fields)
                     edge_label = ",\n".join(dep_fields)
                     
-                if edge.type_ == Dependency.SUCCESSOR and type(edge.dep.value) is bool:
-                    if edge.dep.value == False:
-                        edge_attrs += " arrowhead = diamond"
+                if edge.type_ == Dependency.SUCCESSOR:
+                    if isinstance(edge.dep.value, bool):
+                        if edge_label != "":
+                            edge_label += "\n"
+                        if edge.dep.value == False:
+                            edge_label += "False"
+                            edge_attrs += " arrowhead = diamond"
+                        else:
+                            edge_label += "True"
+                            #edge_attrs += " arrowhead = dot"
+                    elif isinstance(edge.dep.value, p4_imperatives.p4_action):
+                        edge_label += edge.dep.value.name
+                    elif isinstance(edge.dep.value, tuple):
+                        tmp_names = map(lambda v: v.name, edge.dep.value)
+                        edge_label += ',\n'.join(tmp_names)
                     else:
-                        edge_attrs += " arrowhead = dot"
+                        print("dbg successor type(edge.dep.value) %s"
+                              " edge.dep.value=%s"
+                              "" % (type(edge.dep.value), edge.dep.value))
+                        assert False
                 if only_crit_and_near_crit_edges:
-                    fwd = edge.attributes.get(forward_crit_path_edge_attr_name,
-                                              False)
-                    bkwd = edge.attributes.get(backward_crit_path_edge_attr_name,
-                                               False)
                     if fwd and bkwd:
                         edge_attrs += " " + on_crit_path_style
                     elif fwd:
-                        if edge_label != "":
-                            edge_label = "\n" + edge_label
-                        edge_label = "f" + edge_label
-                        edge_attrs += " " + off_crit_path_style
+#                        if edge_label != "":
+#                            edge_label = "\n" + edge_label
+#                        edge_label = "f" + edge_label
+                        pass
                     elif bkwd:
-                        if edge_label != "":
-                            edge_label = "\n" + edge_label
-                        edge_label = "b" + edge_label
+#                        if edge_label != "":
+#                            edge_label = "\n" + edge_label
+#                        edge_label = "b" + edge_label
+                        pass
+                    else:
                         edge_attrs += " " + off_crit_path_style
                 if edge_label != "":
                     edge_attrs = ("label=\"" + edge_label + "\"" +
