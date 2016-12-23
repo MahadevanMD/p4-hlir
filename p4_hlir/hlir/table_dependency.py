@@ -634,7 +634,7 @@ def annotate_hlir(hlir):
 
     for ingress_ptr in hlir.p4_ingress_ptr:
         ingress_graph = rmt_build_table_graph_ingress(hlir)
-        if hlir.analysis_args['do_transitive_reduction']:
+        if hlir.analysis_args.get('do_transitive_reduction', False):
             time1 = time.time()
             ingress_graph.transitive_reduction()
             time2 = time.time()
@@ -646,7 +646,7 @@ def annotate_hlir(hlir):
 
     if hlir.p4_egress_ptr is not None:
         egress_graph = rmt_build_table_graph_egress(hlir)
-        if hlir.analysis_args['do_transitive_reduction']:
+        if hlir.analysis_args.get('do_transitive_reduction', False):
             time1 = time.time()
             egress_graph.transitive_reduction()
             time2 = time.time()

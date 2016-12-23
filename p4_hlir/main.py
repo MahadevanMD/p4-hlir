@@ -33,6 +33,7 @@ class HLIR():
         self.source_files = [] + list(args)
         self.source_txt = []
         self.preprocessor_args = [] 
+        self.analysis_args = {}
         self.primitives = []
 
         self.p4_objects = []
