@@ -197,12 +197,6 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                                   debug_key_result_widths = False,
                                   dot_formats = ['png', 'eps'],
                                   split_match_action_events = False):
-    print 
-    print "TABLE DEPENDENCIES..."
-
-    print
-    print "INGRESS PIPELINE"
-
     # TBD: Make these command line options
     min_match_latency = 9
     min_action_latency = 1
@@ -211,68 +205,31 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
     #almost_crit_path_delta = 0
     only_crit_and_near_crit_edges = split_match_action_events
 
-    filename_dot = os.path.join(gen_dir, filebase + ".ingress.tables_dep.dot")
-    graph = dependency_graph.build_table_graph_ingress(
-        hlir,
-        split_match_action_events=split_match_action_events,
-        min_match_latency=min_match_latency,
-        min_action_latency=min_action_latency)
-    if split_match_action_events:
-        forward_crit_path_len, earliest_time = graph.critical_path(
-            'forward',
-            show_conds = show_conds,
-            debug = debug_count_min_stages,
-            debug_key_result_widths = debug_key_result_widths,
-            crit_path_edge_attr_name = 'on_forward_crit_path',
-            almost_crit_path_edge_attr_name = 'almost_forward_crit_path',
-            almost_crit_path_delta = almost_crit_path_delta)
-        backward_crit_path_len, latest_time = graph.critical_path(
-            'backward',
-            show_conds = show_conds,
-            debug = debug_count_min_stages,
-            debug_key_result_widths = debug_key_result_widths,
-            crit_path_edge_attr_name = 'on_backward_crit_path',
-            almost_crit_path_edge_attr_name = 'almost_backward_crit_path',
-            almost_crit_path_delta = almost_crit_path_delta)
-        if forward_crit_path_len != backward_crit_path_len:
-            print("forward and backward critical path length calculations"
-                  " give different answers -- possible bug: %d vs. %d"
-                  "" % (forward_crit_path_len, backward_crit_path_len))
-        min_stages = forward_crit_path_len
-    else:
-        min_stages = graph.count_min_stages(
-            show_conds = show_conds,
-            debug = debug_count_min_stages,
-            debug_key_result_widths = debug_key_result_widths)
-        earliest_time = None
-        latest_time = None
-    print "pipeline ingress requires at least", min_stages, "stages"
-    with open(filename_dot, 'w') as dotf:
-        graph.generate_dot(
-            out = dotf,
-            show_control_flow = show_control_flow,
-            show_condition_str = show_condition_str,
-            show_fields = show_fields,
-            earliest_time = earliest_time,
-            latest_time = latest_time,
-            only_crit_and_near_crit_edges = only_crit_and_near_crit_edges,
-            forward_crit_path_edge_attr_name = 'on_forward_crit_path',
-            backward_crit_path_edge_attr_name = 'on_backward_crit_path',
-            almost_crit_path_edge_attr_name = 'almost_forward_crit_path')
-
-    generate_graph(filename_dot,
-                   os.path.join(gen_dir, filebase + ".ingress.tables_dep"),
-                   dot_formats)
-
     print
-    print "EGRESS PIPELINE"
-    if hlir.p4_egress_ptr:
-        filename_dot = os.path.join(gen_dir, filebase + ".egress.tables_dep.dot")
-        graph = dependency_graph.build_table_graph_egress(
-            hlir,
-            split_match_action_events=split_match_action_events,
-            min_match_latency=min_match_latency,
-            min_action_latency=min_action_latency)
+    print "TABLE DEPENDENCIES..."
+
+    for pipeline in ['ingress', 'egress']:
+        print
+        print "%s PIPELINE" % (pipeline.upper())
+
+        if pipeline == 'egress' and not hlir.p4_egress_ptr:
+            print "Egress pipeline is empty"
+            continue
+
+        filename_dot = os.path.join(gen_dir, (filebase + "." + pipeline +
+                                              ".tables_dep.dot"))
+        if pipeline == 'ingress':
+            graph = dependency_graph.build_table_graph_ingress(
+                hlir,
+                split_match_action_events=split_match_action_events,
+                min_match_latency=min_match_latency,
+                min_action_latency=min_action_latency)
+        else:
+            graph = dependency_graph.build_table_graph_egress(
+                hlir,
+                split_match_action_events=split_match_action_events,
+                min_match_latency=min_match_latency,
+                min_action_latency=min_action_latency)
         if split_match_action_events:
             forward_crit_path_len, earliest_time = graph.critical_path(
                 'forward',
@@ -302,7 +259,7 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                 debug_key_result_widths = debug_key_result_widths)
             earliest_time = None
             latest_time = None
-        print "pipeline egress requires at least", min_stages, "stages"
+        print "pipeline", pipeline, "requires at least", min_stages, "stages"
         with open(filename_dot, 'w') as dotf:
             graph.generate_dot(
                 out = dotf,
@@ -317,9 +274,8 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                 almost_crit_path_edge_attr_name = 'almost_forward_crit_path')
 
         generate_graph(filename_dot,
-                       os.path.join(gen_dir, filebase + ".egress.tables_dep"),
+                       os.path.join(gen_dir, (filebase + "." + pipeline +
+                                              ".tables_dep")),
                        dot_formats)
-    else:
-        print "Egress pipeline is empty"
 
     print

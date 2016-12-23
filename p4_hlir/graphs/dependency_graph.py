@@ -390,6 +390,7 @@ class Graph:
                      show_fields = True,
                      earliest_time = None,
                      latest_time = None,
+                     show_min_max_scheduled_times = False,
                      only_crit_and_near_crit_edges = False,
                      forward_crit_path_edge_attr_name = None,
                      backward_crit_path_edge_attr_name = None,
@@ -421,19 +422,20 @@ class Graph:
                 node_attrs = " shape=box"
                 if show_condition_str:
                     node_label += "\\n" + str(node.p4_node.condition)
-            # TBD: Add optional labels for table match/action nodes
-            early = "-"
-            if earliest_time and node in earliest_time:
-                early = "%s" % (earliest_time[node])
-            late = "-"
-            if latest_time and node in latest_time:
-                late = "%s" % (latest_time[node])
-            node_label += "\\n" + early + "," + late
+            if show_min_max_scheduled_times:
+                early = "-"
+                if earliest_time and node in earliest_time:
+                    early = "%s" % (earliest_time[node])
+                late = "-"
+                if latest_time and node in latest_time:
+                    late = "%s" % (latest_time[node])
+                node_label += "\\n" + early + "," + late
             node_attrs += " label=\"" + node_label + "\""
-            if early == late and early != "-":
-                node_attrs += " style=bold"
-            else:
-                node_attrs += " style=dotted"
+            if show_min_max_scheduled_times:
+                if early == late and early != "-":
+                    node_attrs += " style=bold"
+                else:
+                    node_attrs += " style=dotted"
             out.write(node.name + " [" + node_attrs + "];\n")
 
         for node in nodes_by_name:
@@ -443,7 +445,6 @@ class Graph:
                 edge = node.edges[node_to]
                 if not show_control_flow and edge.type_ == Dependency.CONTROL_FLOW:
                     continue
-#                if only_crit_and_near_crit_edges and node.type_ != Node.CONDITION :
                 if only_crit_and_near_crit_edges:
                     if not (edge.attributes.get(forward_crit_path_edge_attr_name, False) or
                             edge.attributes.get(backward_crit_path_edge_attr_name, False)):
