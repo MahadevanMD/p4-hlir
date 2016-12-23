@@ -1,9 +1,9 @@
-# Copyright 2013-present Barefoot Networks, Inc. 
-# 
+# Copyright 2013-present Barefoot Networks, Inc.
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
@@ -41,7 +41,7 @@ def dump_table(node, exit_node, visited=None):
         p += "   %s [shape=ellipse];\n" % node.name
     elif type(node) is p4.p4_conditional_node:
         p += "   %s [shape=box label=\"%s\"];\n" % (get_call_name(node), str(node.condition))
-            
+
     for label, next_node in node.next_.items():
         if type(node) is p4.p4_table:
             arrowhead = "normal"
