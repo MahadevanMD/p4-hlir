@@ -75,26 +75,22 @@ def get_parser():
                         produce extra debugging output showing how
                         the table search key and result widths were
                         calculated.""")
-    parser.add_argument('--deps-skip-transitive-reduction',
-                        action='store_true', default = False,
-                        help="""When drawing table dependency graphs,
-                        skip the step that minimizes the number of dependencies.
-                        It uses an O(N^3) algorithm for doing so, if it is
-                        not skipped, which can take a long time for larger
-                        P4 programs.  It does significantly reduce the number
-                        of dependencies, which can make the drawn dependency
-                        graphs have no redundant dependencies.""")
     parser.add_argument('--split-match-action-events',
                         action='store_true', default = False,
                         help="""When drawing table dependency graphs and
                         calculating a shortest path, use separate 'events'
                         for a table's match and action portions.""")
+    parser.add_argument('--deps-show-all',
+                        action='store_true', default = False,
+                        help="""When drawing table dependency graphs, show
+                        edges for all dependencies, not only those on a
+                        critical path.""")
     parser.add_argument('--dot-format', action='append', default = [],
                         help="""The format to use when running 'dot' for
                         generating visual graphs from .dot files.
                         Use 'none' to skip this step, which can be useful
                         for large P4 programs, and the dependency graphs
-                        can get larger if --deps-skip-transitive-reduction
+                        can get larger if --deps-show-all
                         is specified.  The option can be given more than
                         once, in which case stop when 'none' is found,
                         or continue trying each format until the first
@@ -150,18 +146,87 @@ def main():
             sys.exit(1)
     gen_dir = os.path.abspath(args.gen_dir)
 
-    if (args.split_match_action_events and
-        not args.deps_skip_transitive_reduction):
-        print("If you specify --split-match-action-events,"
-              " must also specify --deps-skip-transitive-reduction,"
-              " or else it can give incorrect scheduling results")
-        sys.exit(1)
+    # I (Andy Fingerhut) added the option --split-match-action-events
+    # to see how much shorter critical paths can be from P4 programs,
+    # if match and action events can be scheduled without being
+    # constrained to alternate match, action, match, action, ...,
+    # repeating time intervals.
 
+    # The original code creates a dependency graph from the P4 source
+    # code, then calls rmt_table_graph.transitive_reduction() to
+    # eliminate 'redundant' dependencies, often significantly reducing
+    # their number.
+
+    # When Graph.count_min_stages is called to calculate a critical
+    # path for the RMT hardware architecture, it should be the same
+    # critical path calculated regardless of whether
+    # transitive_reduction was called or not (I have not tested this,
+    # but believe it should be true).
+
+    # When the --split-match-action-events option is used, a different
+    # dependency graph is generated using the function
+    # generate_graph2, and Graph.critical_path is used instead of
+    # Graph.count_min_stages to find a critical path.  I am doubtful
+    # that calling transitive_reduction would produce correct results
+    # in this case, and think it is safest to skip doing that when the
+    # option is given.
+
+    # A similar, but different, way to reduce the number of edges in
+    # the table dependency graphs drawn is to only show edges on a
+    # critical path.  This is what is done by default.
+
+    # Summary of behavior:
+
+    # (1) If --split-match-action-events is _not_ used:
+
+    # (1a) and --deps-show-all is not used:
+
+    # Call transitive_reduction to reduce the number of dependencies,
+    # use generate_graph to create the dependency graph, use
+    # Graph.count_min_stages to find a critical path, and show all
+    # remaining dependencies in the table dependency graph.
+
+    # (1b) and --deps-show-all is used:
+
+    # Same as (1a), except skip calling transitive_reduction to leave
+    # the larger number of dependencies.  Show all dependencies in the
+    # table dependency graph.
+
+    # (2) If --split-match-action-events is used:
+
+    # (2a) and --deps-show-all is not used:
+
+    # Do not call transitive_reduction.  Use generate_graph2 to create
+    # the 'more detailed/refined' dependency graph, use
+    # Graph.critical_path to find all critical paths, and show only
+    # the edges on those critical paths when drawing the table
+    # dependency graph.
+    
+    # (2b) and --deps-show-all is used:
+
+    # Same as (2a), except show all edges when drawing the table
+    # dependency graph.
+
+    deps_skip_transitive_reduction = False
+    if args.split_match_action_events or args.deps_show_all:
+        deps_skip_transitive_reduction = True
+
+    show_only_critical_dependencies = False
+    if args.split_match_action_events:
+        if args.deps_show_all:
+            show_only_critical_dependencies = False
+        else:
+            show_only_critical_dependencies = True
+    else:
+        # This option does not work for critical paths calculated with
+        # Graph.count_min_stages.
+        show_only_critical_dependencies = False
+    
     h = HLIR(args.source)
     for parg in preprocessor_args:
         h.add_preprocessor_args(parg)
     h.set_analysis_args({'do_transitive_reduction':
-                         not args.deps_skip_transitive_reduction})
+                         not deps_skip_transitive_reduction})
 
     for primitive_f in args.primitives:
         with open(primitive_f, 'r') as fp:
@@ -198,7 +263,8 @@ def main():
             debug_count_min_stages = args.deps_debug_count_min_stages,
             debug_key_result_widths = args.debug_key_result_widths,
             dot_formats = dot_formats,
-            split_match_action_events = args.split_match_action_events)
+            split_match_action_events = args.split_match_action_events,
+            show_only_critical_dependencies = show_only_critical_dependencies)
     
     pass
 

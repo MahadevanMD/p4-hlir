@@ -196,14 +196,11 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                                   debug_count_min_stages = False,
                                   debug_key_result_widths = False,
                                   dot_formats = ['png', 'eps'],
-                                  split_match_action_events = False):
+                                  split_match_action_events = False,
+                                  show_only_critical_dependencies = False):
     # TBD: Make these command line options
     min_match_latency = 9
     min_action_latency = 1
-    almost_crit_path_delta = 2 * (min_action_latency + min_match_latency)
-    #almost_crit_path_delta = (min_action_latency + min_match_latency)
-    #almost_crit_path_delta = 0
-    only_crit_and_near_crit_edges = split_match_action_events
 
     print
     print "TABLE DEPENDENCIES..."
@@ -236,17 +233,13 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                 show_conds = show_conds,
                 debug = debug_count_min_stages,
                 debug_key_result_widths = debug_key_result_widths,
-                crit_path_edge_attr_name = 'on_forward_crit_path',
-                almost_crit_path_edge_attr_name = 'almost_forward_crit_path',
-                almost_crit_path_delta = almost_crit_path_delta)
+                crit_path_edge_attr_name = 'on_forward_crit_path')
             backward_crit_path_len, latest_time = graph.critical_path(
                 'backward',
                 show_conds = show_conds,
                 debug = debug_count_min_stages,
                 debug_key_result_widths = debug_key_result_widths,
-                crit_path_edge_attr_name = 'on_backward_crit_path',
-                almost_crit_path_edge_attr_name = 'almost_backward_crit_path',
-                almost_crit_path_delta = almost_crit_path_delta)
+                crit_path_edge_attr_name = 'on_backward_crit_path')
             if forward_crit_path_len != backward_crit_path_len:
                 print("forward and backward critical path length calculations"
                       " give different answers -- possible bug: %d vs. %d"
@@ -270,10 +263,9 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                 earliest_time = earliest_time,
                 latest_time = latest_time,
                 show_min_max_scheduled_times = show_min_max_scheduled_times,
-                only_crit_and_near_crit_edges = only_crit_and_near_crit_edges,
+                show_only_critical_dependencies = show_only_critical_dependencies,
                 forward_crit_path_edge_attr_name = 'on_forward_crit_path',
-                backward_crit_path_edge_attr_name = 'on_backward_crit_path',
-                almost_crit_path_edge_attr_name = 'almost_forward_crit_path')
+                backward_crit_path_edge_attr_name = 'on_backward_crit_path')
 
         generate_graph(filename_dot,
                        os.path.join(gen_dir, (filebase + "." + pipeline +

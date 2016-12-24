@@ -401,10 +401,9 @@ class Graph:
                      earliest_time = None,
                      latest_time = None,
                      show_min_max_scheduled_times = False,
-                     only_crit_and_near_crit_edges = False,
+                     show_only_critical_dependencies = False,
                      forward_crit_path_edge_attr_name = None,
-                     backward_crit_path_edge_attr_name = None,
-                     almost_crit_path_edge_attr_name = None):
+                     backward_crit_path_edge_attr_name = None):
         styles = {Dependency.CONTROL_FLOW: "style=dotted",
                   Dependency.REVERSE_READ: "color=orange",
                   Dependency.SUCCESSOR: "color=green",
@@ -457,7 +456,7 @@ class Graph:
                 edge = node.edges[node_to]
                 if not show_control_flow and edge.type_ == Dependency.CONTROL_FLOW:
                     continue
-                if only_crit_and_near_crit_edges:
+                if show_only_critical_dependencies:
                     fwd = edge.attributes.get(forward_crit_path_edge_attr_name,
                                               False)
                     bkwd = edge.attributes.get(backward_crit_path_edge_attr_name,
@@ -498,7 +497,7 @@ class Graph:
                               " edge.dep.value=%s"
                               "" % (type(edge.dep.value), edge.dep.value))
                         assert False
-                if only_crit_and_near_crit_edges:
+                if show_only_critical_dependencies:
                     if fwd and bkwd:
                         edge_attrs += " " + on_crit_path_style
                     elif fwd:
