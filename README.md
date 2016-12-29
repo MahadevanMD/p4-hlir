@@ -34,6 +34,10 @@ setup options):
     # Executables like p4-validate and p4-graphs will go in a 'bin'
     # directory inside of site.USER_BASE.
 
+    # In a bash shell, you can do this to add this bin directory to
+    # your path:
+    export PATH=`python -c 'import site; print site.USER_BASE'`/bin:$PATH
+
 To run validate tool:  
 p4-validate \<path_to_p4_program\>
 
