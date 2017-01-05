@@ -230,11 +230,19 @@ class Graph:
             print('')
             print('direction %s' % (direction))
             print('')
+        # Including table names in sort keys helps make the order
+        # repeatable across multiple runs.
         tables_by_max_path = sorted(sorted_list,
                                     key=lambda t: [max_path[t], t.name])
         for table in tables_by_max_path:
             if table in crit_path_edges_into:
-                for from_table, edge in crit_path_edges_into[table].items():
+                # Again, this sorting makes the output repeatable
+                # across runs.
+                crit_path_edges_by_table_name = sorted(
+                    crit_path_edges_into[table].keys(),
+                    key=lambda x: x.name)
+                for from_table in crit_path_edges_by_table_name:
+                    edge = crit_path_edges_into[table][from_table]
                     dname = Dependency._types.get(edge.type_, 'unknown')
                     x = max_path[from_table]
                     y = edge.attributes['min_latency']
@@ -391,7 +399,14 @@ class Graph:
             print(line)
         print("For all stages, total search key width %d result width %d"
               "" % (total_key_width, total_result_width))
-        return nb_stages
+
+        max_path = {}
+        path_length = 0
+        for stage in stage_list:
+            for table in stage:
+                max_path[table] = path_length
+            path_length += 1
+        return nb_stages, max_path
 
 
     def generate_dot(self, out = sys.stdout,
