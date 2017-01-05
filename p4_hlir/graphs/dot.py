@@ -16,11 +16,14 @@
 Extract control flow and parse graphs to DOT graph descriptions and generate
 PNGs of them
 """
-import p4_hlir.hlir.p4 as p4
+import collections
 import os
 import subprocess
 import argparse
 import dependency_graph
+import hlir_info as info
+import p4_hlir.hlir.p4 as p4
+import p4_hlir.hlir.p4_tables as p4_tables
 
 def get_call_name (node, exit_node=None):
     if node:
@@ -37,19 +40,19 @@ def dump_table(node, exit_node, visited=None):
     else:
         visited.add(node)
 
-    if type(node) is p4.p4_table:
+    if isinstance(node, p4.p4_table):
         p += "   %s [shape=ellipse];\n" % node.name
-    elif type(node) is p4.p4_conditional_node:
+    elif isinstance(node, p4.p4_conditional_node):
         p += "   %s [shape=box label=\"%s\"];\n" % (get_call_name(node), str(node.condition))
 
     for label, next_node in node.next_.items():
-        if type(node) is p4.p4_table:
+        if isinstance(node, p4.p4_table):
             arrowhead = "normal"
-            if type(label) is str:
+            if isinstance(label, str):
                 label_str = " label=\"%s\"" % label
             else:
                 label_str = " label=\"%s\"" % label.name
-        elif type(node) is p4.p4_conditional_node:
+        elif isinstance(node, p4.p4_conditional_node):
             label_str = ""
             if label:
                 arrowhead = "dot"
@@ -78,7 +81,7 @@ def dump_parser(node, visited=None):
         p += " | {"
         for elem in node.branch_on:
             elem_name = str(elem).replace("instances.","")
-            if type(elem) is tuple:
+            if isinstance(elem, tuple):
                 elem_name = "current"+elem_name
             p += elem_name + " | "
         p = p[0:-3]
@@ -87,25 +90,25 @@ def dump_parser(node, visited=None):
 
     for case, target in node.branch_to.items():
         label = ""
-        if type(case) is not list:
+        if not isinstance(case, list):
             case = [case]
         for caseval in case:
-            if type(caseval) is int or type(caseval) is long:
+            if isinstance(caseval, int) or isinstance(caseval, long):
                 label += hex(caseval) + ", "
             elif caseval == p4.P4_DEFAULT:
                 label += "default, "
-            elif type(caseval) == p4.p4_parse_value_set:
+            elif isinstance(caseval, p4.p4_parse_value_set):
                 label += "set("+caseval.name+"), "
         label = label[0:-2]
 
         dst_name = target.name
-        if type(target) is p4.p4_table:
+        if isinstance(target, p4.p4_table):
             dst_name = "__table_"+dst_name
 
         p += "   %s -> %s [label=\"%s\"];\n" % (node.name, dst_name, label)
 
         for _, target in node.branch_to.items():
-            if type(target) is p4.p4_parse_state and target.name not in visited:
+            if isinstance(target, p4.p4_parse_state) and target.name not in visited:
                 p += dump_parser(target, visited)
 
     return p
@@ -205,6 +208,8 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
     print
     print "TABLE DEPENDENCIES..."
 
+    tally_prim_acts_total = [collections.defaultdict(int),
+                             collections.defaultdict(int)]
     for pipeline in ['ingress', 'egress']:
         print
         print "%s PIPELINE" % (pipeline.upper())
@@ -246,13 +251,101 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                       "" % (forward_crit_path_len, backward_crit_path_len))
             min_stages = forward_crit_path_len
         else:
-            min_stages = graph.count_min_stages(
+            min_stages, earliest_time = graph.count_min_stages(
                 show_conds = show_conds,
                 debug = debug_count_min_stages,
                 debug_key_result_widths = debug_key_result_widths)
-            earliest_time = None
             latest_time = None
         print "pipeline", pipeline, "requires at least", min_stages, "stages"
+
+        # Show extra details about tables and/or their actions
+        print('')
+        print "%s action details" % (pipeline)
+        print('')
+        tables_by_earliest_time = sorted(earliest_time.keys(),
+                                         key=lambda t: [earliest_time[t],
+                                                        t.name])
+        tally_prim_act_kinds = [collections.defaultdict(int),
+                                collections.defaultdict(int)]
+        tables_by_max_prim_acts = [collections.defaultdict(list),
+                                   collections.defaultdict(list)]
+        table_num = 0
+        for table in tables_by_earliest_time:
+            if isinstance(table.p4_node, p4_tables.p4_conditional_node):
+                continue
+            if split_match_action_events and table.name[-6:] == '_MATCH':
+                # Only show the details about actions for the
+                # '_ACTION' node in the graph, not the '_MATCH' node,
+                # otherwise we will show all details twice.
+                continue
+#            print('dbg type(table)=%s' % (type(table.p4_node)))
+#            print('    table.__dict__=%s' % (table.p4_node.__dict__))
+            p4table = table.p4_node
+            match_info = info.match_field_info(p4table)
+            result_info = info.result_info(p4table)
+            # Keep separate tallies of primitive action kinds used,
+            # depending on whether they are in 'pure action' tables or
+            # not.
+            if info.pure_action_table(p4table, match_info=match_info,
+                                      result_info=result_info):
+                tmp_idx = 0
+            else:
+                tmp_idx = 1
+            act_info = info.action_info(p4table,
+                                        tally=tally_prim_act_kinds[tmp_idx],
+                                        debug=False)
+#            print('%d %s' % (table_num, table.name))
+            num_actions = len(act_info['action_descriptions'])
+            max_primitive_actions = 0
+            for i in range(0, num_actions):
+                num_primitive_actions = len(act_info['action_descriptions'][i])
+                if num_primitive_actions > max_primitive_actions:
+                    max_primitive_actions = num_primitive_actions
+            print('table %s search_bits %d res_bits %d'
+                  ' num_act %d max_prim_acts %d' % (
+                      act_info['table_name'],
+                      match_info['total_field_width'],
+                      result_info['result_width'],
+                      num_actions,
+                      max_primitive_actions))
+            tables_by_max_prim_acts[tmp_idx][max_primitive_actions].append(table)
+            for i in range(0, num_actions):
+                print('  %d: %d %s' % (
+                    i,
+                    len(act_info['action_descriptions'][i]),
+                    ' '.join(act_info['action_descriptions'][i])))
+            table_num += 1
+        for tmp_idx in [1, 0]:
+            if tmp_idx == 0:
+                tmp_desc = 'pure action'
+            else:
+                tmp_desc = 'regular'
+            print
+            print("%s action count for %s tables"
+                  "" % (pipeline, tmp_desc))
+            info.print_tally_of_primitive_actions(tally_prim_act_kinds[tmp_idx])
+            for k in tally_prim_act_kinds[tmp_idx]:
+                tally_prim_acts_total[tmp_idx][k] += tally_prim_act_kinds[tmp_idx][k]
+
+            print
+            print("Number of %s %s tables with given max number"
+                  " of primitive actions for any of its actions:"
+                  "" % (pipeline, tmp_desc))
+            print "max  # of   cum. # cum."
+            print "acts tables tables fract"
+            print "---- ------ ------ -----"
+            sorted_list = sorted(tables_by_max_prim_acts[tmp_idx].keys())
+            n = 0
+            for max_primitive_actions in sorted_list:
+                n += len(tables_by_max_prim_acts[tmp_idx][max_primitive_actions])
+            cum_n = 0
+            for max_primitive_actions in sorted_list:
+                x = len(tables_by_max_prim_acts[tmp_idx][max_primitive_actions])
+                cum_n += x
+                print("%4d %6d %6d %5.1f%%" % (
+                    max_primitive_actions,
+                    x, cum_n, (100.0 * cum_n) / n))
+
         show_min_max_scheduled_times = split_match_action_events
         with open(filename_dot, 'w') as dotf:
             graph.generate_dot(
@@ -271,5 +364,22 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                        os.path.join(gen_dir, (filebase + "." + pipeline +
                                               ".tables_dep")),
                        dot_formats)
+
+    overall_total = collections.defaultdict(int)
+    for tmp_idx in [1, 0]:
+        if tmp_idx == 0:
+            tmp_desc = 'pure action'
+        else:
+            tmp_desc = 'regular'
+        print
+        print("ingress plus egress action count for %s tables"
+              "" % (tmp_desc))
+        info.print_tally_of_primitive_actions(tally_prim_acts_total[tmp_idx])
+        for k in tally_prim_acts_total[tmp_idx]:
+            overall_total[k] += tally_prim_acts_total[tmp_idx][k]
+
+    print
+    print "ingress plus egress action count"
+    info.print_tally_of_primitive_actions(overall_total)
 
     print
