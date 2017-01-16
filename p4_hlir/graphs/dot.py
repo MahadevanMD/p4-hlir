@@ -19,7 +19,7 @@ PNGs of them
 import collections
 import os
 import subprocess
-import argparse
+import pprint as pp
 import dependency_graph
 import hlir_info as info
 import p4_hlir.hlir.p4 as p4
@@ -258,6 +258,96 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
             latest_time = None
         print "pipeline", pipeline, "requires at least", min_stages, "stages"
 
+        # Create output data that can be used for an external
+        # scheduler/optimizer.
+        # TBD: Make this controlled by new command line option
+        create_dependency_data = True
+        if create_dependency_data:
+            sched_fname = os.path.join(gen_dir, (filebase + "." + pipeline +
+                                                 ".sched_data.txt")),
+            schedf = open(sched_fname[0], 'w')
+        if create_dependency_data and split_match_action_events:
+            tables_by_earliest_time = sorted(earliest_time.keys(),
+                                             key=lambda t: [earliest_time[t],
+                                                            t.name])
+            node_data = {}
+            edge_data = {}
+            for table in tables_by_earliest_time:
+                if isinstance(table.p4_node, p4_tables.p4_conditional_node):
+                    # Condition nodes probably best treated as 'free'
+                    # action nodes, i.e. num_fields == 0, at least
+                    # until we figure out something more precise.
+                    node_info = {'type': 'condition',
+                                 'num_fields': 0}
+                else:
+                    p4table = table.p4_node
+                    if table.name[-6:] == '_MATCH':
+                        if info.pure_action_table(p4table):
+                            # Then do not generate a match node for
+                            # this table.  It is likely a table
+                            # created solely for the side effect of
+                            # its action.
+                            node_info = None
+                        else:
+                            match_info = info.match_field_info(p4table)
+                            key_width = match_info['total_field_width']
+                            # There are at least a few tables that
+                            # have actions that actually cause side
+                            # effects, but they have 0 search key
+                            # bits.  Treat them as having 1 search key
+                            # bit, since if in the hardware they are
+                            # implemented as sending out a 'read
+                            # request' for the 1 entry that is
+                            # effectively in the table, it will
+                            # consume a little bit of match key
+                            # bandwidth out of the processor.
+                            if key_width == 0:
+                                key_width = 1
+                            node_info = {'type': 'match',
+                                         'key_width': key_width}
+                    elif table.name[-7:] == '_ACTION':
+                        act_info = info.action_info(p4table)
+                        node_info = {
+                            'type': 'action',
+                            'num_fields': act_info['max_primitive_actions']}
+                    else:
+                        # some internal error.  Should not happen
+                        assert(False)
+                if node_info is not None:
+                    node_data[table.name] = node_info
+            debug_edge_min_latency = False
+            for node_from in tables_by_earliest_time:
+                if debug_edge_min_latency:
+                    print('dbg node_from.name=%s' % (node_from.name))
+                if node_from.name not in node_data:
+                    if debug_edge_min_latency:
+                        print('    dbg node_from.name not in node_data')
+                    continue
+                for node_to, edge in node_from.edges.items():
+                    if debug_edge_min_latency:
+                        print('    dbg node_to.name=%s' % (node_to.name))
+                    if node_to.name not in node_data:
+                        if debug_edge_min_latency:
+                            print('        dbg node_to.name not in node_data')
+                        continue
+                    if edge.type_ <= 0:
+                        if debug_edge_min_latency:
+                            print('        dbg edge.type_ %d <= 0' % (edge.type_))
+                        continue
+                    edge_data[(node_from.name, node_to.name)] = {
+                        'delay': edge.attributes['min_latency']}
+            print >>schedf, 'nodes = \\'
+            pp.pprint(node_data, stream=schedf)
+            print >>schedf, '\nedges = \\'
+            pp.pprint(edge_data, stream=schedf)
+
+        if create_dependency_data and not split_match_action_events:
+            # TBD
+            pass
+
+        if create_dependency_data:
+            schedf.close()
+
         # Show extra details about tables and/or their actions
         print('')
         print "%s action details" % (pipeline)
@@ -286,8 +376,8 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
             # Keep separate tallies of primitive action kinds used,
             # depending on whether they are in 'pure action' tables or
             # not.
-            if info.pure_action_table(p4table, match_info=match_info,
-                                      result_info=result_info):
+            if info.pure_action_table(p4table, match=match_info,
+                                      result=result_info):
                 tmp_idx = 0
             else:
                 tmp_idx = 1
@@ -296,11 +386,7 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                                         debug=False)
 #            print('%d %s' % (table_num, table.name))
             num_actions = len(act_info['action_descriptions'])
-            max_primitive_actions = 0
-            for i in range(0, num_actions):
-                num_primitive_actions = len(act_info['action_descriptions'][i])
-                if num_primitive_actions > max_primitive_actions:
-                    max_primitive_actions = num_primitive_actions
+            max_primitive_actions = act_info['max_primitive_actions']
             print('table %s search_bits %d res_bits %d'
                   ' num_act %d max_prim_acts %d' % (
                       act_info['table_name'],
