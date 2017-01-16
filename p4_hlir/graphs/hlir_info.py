@@ -190,7 +190,7 @@ def result_info(table):
     return ret
 
 
-def pure_action_table(table, match_info=None, result_info=None):
+def pure_action_table(table, match=None, result=None):
     """Return True if `table` is a 'pure action' table.
     'Pure action' tables are those created simply for their
     primitive action side effects.  They have 0 search key
@@ -198,14 +198,14 @@ def pure_action_table(table, match_info=None, result_info=None):
     action, and that action has no parameters).
 
     It is not necessary to pass any values for the optional arguments
-    `match_info` and `result_info`, but if you pass the corresponding
+    `match` and `result`, but if you pass the corresponding
     return values of functions match_field_info and result_info, it
     may save a little bit of compute time."""
-    if match_info is None:
-        match_info = info.match_field_info(table)
-    if result_info is None:
-        result_info = info.result_info(table)
-    if match_info['total_field_width'] == 0 and result_info['result_width'] == 0:
+    if match is None:
+        match = match_field_info(table)
+    if result is None:
+        result = result_info(table)
+    if match['total_field_width'] == 0 and result['result_width'] == 0:
         return True
     return False
 
@@ -332,6 +332,9 @@ def action_info(table, tally=None, debug=False):
         abbreviated descriptions for action `i` of the table.
 
         'num_actions' (int) - the number of actions the table has.
+
+        'max_primitive_actions' (int) - the maximum number of
+        primitive actions across all of the table's actions.
     """
     ret = {'table_name': table.name}
     if type(table) is p4_tables.p4_conditional_node:
@@ -377,7 +380,8 @@ def action_info(table, tally=None, debug=False):
             assert(isinstance(prim_act_kind, p4_imperatives.p4_action))
             assert(isinstance(args, list))
             assert(isinstance(call_loc, list))
-            tally[prim_act_kind] += 1
+            if tally is not None:
+                tally[prim_act_kind] += 1
             if debug:
                 print('')
                 print('        prim_act_kind %s num_args %d'
@@ -657,6 +661,14 @@ def action_info(table, tally=None, debug=False):
         for i in range(0, len(ret['action_descriptions'])):
             print('  %d %s' % (i, ' '.join(ret['action_descriptions'][i])))
         pp.pprint(ret)
+
+    max_primitive_actions = 0
+    for i in range(0, ret['num_actions']):
+        num_primitive_actions = len(ret['action_descriptions'][i])
+        if num_primitive_actions > max_primitive_actions:
+            max_primitive_actions = num_primitive_actions
+    ret['max_primitive_actions'] = max_primitive_actions
+
     return ret
 
 
