@@ -736,6 +736,8 @@ def generate_graph2(p4_root, name, min_match_latency, min_action_latency):
                 # restrictive one, to be safe.
                 edge.attributes['min_latency'] = 0
                 nodes['action'].add_edge(nodes_to['action'], edge)
+            else:
+                assert(False)
 
         # Add edges for CONTROL_FLOW dependencies
         next_ = set(nt.next_.values())
