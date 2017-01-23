@@ -334,8 +334,10 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                         if debug_edge_min_latency:
                             print('        dbg edge.type_ %d <= 0' % (edge.type_))
                         continue
+                    assert('dep_type' in edge.attributes)
                     edge_data[(node_from.name, node_to.name)] = {
-                        'delay': edge.attributes['min_latency']}
+                        'delay': edge.attributes['min_latency'],
+                        'dep_type': edge.attributes['dep_type']}
             print >>schedf, 'nodes = \\'
             pp.pprint(node_data, stream=schedf)
             print >>schedf, '\nedges = \\'

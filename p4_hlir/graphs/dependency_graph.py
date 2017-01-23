@@ -606,6 +606,7 @@ def _graph_add_new_node_pair(graph, p4_node, min_match_latency):
         edge.type_ = Dependency.MATCH
         assert(min_match_latency is not None)
         edge.attributes['min_latency'] = min_match_latency
+        edge.attributes['dep_type'] = 'new_match_to_action'
         match_node.add_edge(action_node, edge)
         return {'match': match_node, 'action': action_node, 'edge': edge}
 
@@ -673,6 +674,7 @@ def generate_graph2(p4_root, name, min_match_latency, min_action_latency):
             # dependency.
             if edge.type_ == Dependency.MATCH:
                 edge.attributes['min_latency'] = min_action_latency
+                edge.attributes['dep_type'] = 'rmt_match'
                 nodes['action'].add_edge(nodes_to['match'], edge)
             elif edge.type_ == Dependency.ACTION:
                 # TBD: ACTION dependencies are currently created even
@@ -695,6 +697,7 @@ def generate_graph2(p4_root, name, min_match_latency, min_action_latency):
                 # second kind of dependency, the more restrictive one
                 # for scheduling.
                 edge.attributes['min_latency'] = min_action_latency
+                edge.attributes['dep_type'] = 'rmt_action'
                 nodes['action'].add_edge(nodes_to['action'], edge)
             elif edge.type_ == Dependency.SUCCESSOR:
                 # TBD: Where should an edge be added for this kind of
@@ -714,8 +717,10 @@ def generate_graph2(p4_root, name, min_match_latency, min_action_latency):
                 # table, then that still seems reasonable.
                 if isinstance(nt, p4_hlir.hlir.p4_conditional_node):
                     edge.attributes['min_latency'] = 0
+                    edge.attributes['dep_type'] = 'rmt_successor'
                 else:
                     edge.attributes['min_latency'] = min_match_latency
+                    edge.attributes['dep_type'] = 'new_successor_conditional_on_table_result_action_type'
                 nodes['match'].add_edge(nodes_to['action'], edge)
             elif edge.type_ == Dependency.REVERSE_READ:
 
@@ -735,6 +740,7 @@ def generate_graph2(p4_root, name, min_match_latency, min_action_latency):
                 # For now, always do the first kind, the more
                 # restrictive one, to be safe.
                 edge.attributes['min_latency'] = 0
+                edge.attributes['dep_type'] = 'rmt_reverse_read'
                 nodes['action'].add_edge(nodes_to['action'], edge)
             else:
                 assert(False)
@@ -745,6 +751,7 @@ def generate_graph2(p4_root, name, min_match_latency, min_action_latency):
             if table and table not in nt.dependencies_for:
                 nodes_to = name_to_nodes[table.name]
                 edge = Edge()
+                edge.attributes['dep_type'] = 'rmt_control_flow'
                 nodes['action'].add_edge(nodes_to['match'], edge)
 
         next_tables.update(next_)
