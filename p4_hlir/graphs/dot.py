@@ -24,6 +24,7 @@ import dependency_graph
 import hlir_info as info
 import p4_hlir.hlir.p4 as p4
 import p4_hlir.hlir.p4_tables as p4_tables
+import p4_hlir.hlir.p4_imperatives as p4_imperatives
 
 def get_call_name (node, exit_node=None):
     if node:
@@ -278,7 +279,8 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                     # action nodes, i.e. num_fields == 0, at least
                     # until we figure out something more precise.
                     node_info = {'type': 'condition',
-                                 'num_fields': 0}
+                                 'num_fields': 0,
+                                 'condition': str(table.p4_node.condition)}
                 else:
                     p4table = table.p4_node
                     if table.name[-6:] == '_MATCH':
@@ -334,10 +336,53 @@ def export_table_dependency_graph(hlir, filebase, gen_dir, show_conds = False,
                         if debug_edge_min_latency:
                             print('        dbg edge.type_ %d <= 0' % (edge.type_))
                         continue
+                    
+                    edge_condition = None
+                    if edge.type_ == dependency_graph.Dependency.SUCCESSOR:
+                        if isinstance(edge.dep.value, bool):
+                            edge_condition = edge.dep.value
+#                            print("----------------------------------------------------------------------")
+#                            print("dbg edge.__dict__=")
+#                            pp.pprint(edge.__dict__)
+#                            print("dbg edge.dep.__dict__=")
+#                            pp.pprint(edge.dep.__dict__)
+#                            print("dbg edge.dep.from_.__dict__=")
+#                            pp.pprint(edge.dep.from_.__dict__)
+#                            print("dbg edge.dep.from_.condition=%s"
+#                                  % (edge.dep.from_.condition))
+#                            print("dbg edge.dep.from_.condition.__dict__=")
+#                            pp.pprint(edge.dep.from_.condition.__dict__)
+                        elif isinstance(edge.dep.value, p4_imperatives.p4_action):
+                            # I believe this case is just like the
+                            # next one, except it is for the special
+                            # case of a single action being the
+                            # condition, whereas the tuple case is
+                            # when there are multiple possible actions
+                            # ORed together.
+#                            print("dbg successor type(edge.dep.value) %s"
+#                                  " edge.dep.value=%s"
+#                                  "" % (type(edge.dep.value), edge.dep.value))
+                            tmp_actions = [edge.dep.value]
+                            edge_condition = list(map(lambda v: v.name,
+                                                      tmp_actions))
+                        elif isinstance(edge.dep.value, tuple):
+                            edge_condition = list(map(lambda v: v.name,
+                                                      edge.dep.value))
+#                            print("dbg successor type(edge.dep.value) %s"
+#                                  " edge.dep.value=%s edge_condition=%s"
+#                                  "" % (type(edge.dep.value), edge.dep.value,
+#                                        edge_condition))
+                        else:
+                            print("dbg successor type(edge.dep.value) %s"
+                                  " edge.dep.value=%s"
+                                  "" % (type(edge.dep.value), edge.dep.value))
+                            assert False
                     assert('dep_type' in edge.attributes)
-                    edge_data[(node_from.name, node_to.name)] = {
-                        'delay': edge.attributes['min_latency'],
-                        'dep_type': edge.attributes['dep_type']}
+                    edge_attrs = {'delay': edge.attributes['min_latency'],
+                                  'dep_type': edge.attributes['dep_type']}
+                    if edge_condition is not None:
+                        edge_attrs['condition'] = edge_condition
+                    edge_data[(node_from.name, node_to.name)] = edge_attrs
             print >>schedf, 'nodes = \\'
             pp.pprint(node_data, stream=schedf)
             print >>schedf, '\nedges = \\'

@@ -123,6 +123,12 @@ corresponding values are themselves sub-dicts with these keys:
     action to perform on the packet regardless of the values in the
     packet's header fields.
 
+    'condition' - This key is only present if the node is a condition
+    node.  Its value is a string representing the conditional
+    expression in the P4 source code.  This expression will have any
+    #define's replaced with their corresponding values, so may not
+    match the source code character for character.
+
 
 `edges` defines scheduling dependencies between nodes.  The keys are
 tuples containing 2 strings, each a node name.  The dependency is from
@@ -189,3 +195,42 @@ or min_match_latency (currently 9).
 
 * 'rmt_control_flow' - the current code should never include such
   dependencies in the output.
+
+
+Edges that represent conditional dependencies of either the
+'rmt_successor' type or
+'new_successor_conditional_on_table_result_action_type' type have a
+key called 'condition'.
+
+If the from node of the edge is a condition node, then the value of
+'condition' will be either True or False, depending on whether the
+conditional execution of the "to node" is based on the condition being
+evaluated as True or False.  Note that there can be more than one edge
+out of a condition node with 'condition' equal to True, if there are
+multiple nodes depending upon the condition being evaluated as True.
+There can also be no edges out of a condition node with 'condition'
+equal to True, e.g. if the 'then' part of the 'if' statement has no
+code to execute.
+
+Similarly, there can be more than one edge out of a condition node
+with 'condition' equal to False.  There can also be no edges out of a
+condition node with 'condition' False, e.g. for an 'if' statement in
+the code that has no 'else', or it has an 'else' branch with no code
+to execute in that branch.
+
+
+If the from node of the edge is a table '_MATCH' node, then the value
+of 'condition' will be a list of strings, which are names of actions
+of that table.  Every table match will result in either a hit, and
+exactly one of the action types defined in the P4 source code as an
+action for the table, or a miss.  For example, an edge from table
+"t1_MATCH' with 'condition' equal to ['a', 'b', 'c'] would represent
+that the "to node" should only be executed if the result of the search
+in table 't1' was one of the actions 'a', 'b', or 'c'.
+
+Just as there can be multiple edges out of a condition node with the
+same 'condition' value, the same is true for multiple edges out of a
+table '_MATCH' node -- they can have the same list of actions.  There
+can be actions of the table that are not conditions on any of its
+outgoing edges, e.g. if the P4 source code has no mention of that
+table action name in its conditional execution clauses.
